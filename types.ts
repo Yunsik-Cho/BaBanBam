@@ -1,5 +1,12 @@
 export interface CritiqueResult {
-  score: number;
+  totalScore: number;
+  details: {
+    face: number; // 얼굴/분위기
+    color: number; // 색감
+    ratio: number; // 비율
+    combination: number; // 조합
+    item: number; // 아이템
+  };
   gentleCritique: string; // Polite, standard language
   sincereCritique: string; // Slang, raw, banmal
   oneLiner: string;
