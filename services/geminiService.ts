@@ -128,6 +128,13 @@ export const generateNoddingVideo = async (base64Image: string, mimeType: string
   Photorealistic, high quality, consistent lighting.`;
 
   try {
+    // Check if generateVideos is available on the SDK instance
+    // @ts-ignore
+    if (typeof ai.models.generateVideos !== 'function') {
+      console.error("Available models methods:", Object.keys(ai.models));
+      throw new Error("Video generation is not supported in the currently loaded @google/genai SDK version. Please ensure strict version control.");
+    }
+
     // Switch to High Quality model (Veo 3.1)
     // @ts-ignore - The 'generateVideos' method is experimental and may be missing from types
     let operation = await ai.models.generateVideos({
