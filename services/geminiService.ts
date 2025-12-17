@@ -128,6 +128,7 @@ export const generateNoddingVideo = async (base64Image: string, mimeType: string
 
   try {
     // Switch to High Quality model (Veo 3.1)
+    // @ts-ignore - The 'generateVideos' method is experimental and may be missing from types
     let operation = await ai.models.generateVideos({
       model: 'veo-3.1-generate-preview',
       prompt: prompt,
@@ -145,6 +146,7 @@ export const generateNoddingVideo = async (base64Image: string, mimeType: string
     // Poll for completion - High quality model takes longer
     while (!operation.done) {
       await new Promise(resolve => setTimeout(resolve, 10000)); // Check every 10 seconds for HQ model
+      // @ts-ignore - The 'getVideosOperation' method is experimental
       operation = await ai.operations.getVideosOperation({operation: operation});
     }
 
