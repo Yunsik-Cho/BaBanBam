@@ -17,10 +17,3 @@ export interface ImageFile {
   base64Data: string; // Pure Base64 data (no prefix)
   mimeType: string;
 }
-
-declare global {
-  interface AIStudio {
-    hasSelectedApiKey: () => Promise<boolean>;
-    openSelectKey: () => Promise<void>;
-  }
-}
