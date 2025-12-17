@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import html2canvas from 'html2canvas';
 import { analyzeFashion } from './services/geminiService';
 import { CritiqueResult, ImageFile } from './types';
 import ApiKeySettings from './components/ApiKeySettings';
@@ -19,10 +20,41 @@ const App: React.FC = () => {
   }>({ loading: false, data: null, error: null });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const resultRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setHasApiKey(hasStoredKey());
   }, []);
+
+  // Auto-save logic: Triggered when analysis data is available
+  useEffect(() => {
+    if (critiqueState.data && resultRef.current) {
+      const captureAndSave = async () => {
+        try {
+          // Wait for DOM animations and images to settle (1.5s)
+          await new Promise(resolve => setTimeout(resolve, 1500));
+          
+          if (!resultRef.current) return;
+
+          // Capture the result container
+          const canvas = await html2canvas(resultRef.current, {
+            useCORS: true,
+            backgroundColor: '#111111',
+            scale: 2 // High resolution
+          });
+          
+          // Use JPEG for cloud storage to optimize size
+          const base64Image = canvas.toDataURL('image/jpeg', 0.9);
+          
+          await saveToCloud(base64Image);
+        } catch (e) {
+          console.error("Auto-save failed", e);
+        }
+      };
+      
+      captureAndSave();
+    }
+  }, [critiqueState.data]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -50,6 +82,24 @@ const App: React.FC = () => {
     }
   };
 
+  const saveToCloud = async (base64Image: string) => {
+    try {
+      // Auto-save image to Vercel Blob
+      await fetch('/api/save-result', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          image: base64Image,
+          timestamp: Date.now()
+        })
+      });
+      console.log('Result image auto-saved to cloud');
+    } catch (e) {
+      // Fail silently if API is not available (e.g. local dev without vercel)
+      console.warn('Auto-save failed (API might be unavailable)');
+    }
+  };
+
   const handleStartProcess = async () => {
     if (!hasApiKey) {
       setIsSettingsOpen(true);
@@ -65,6 +115,7 @@ const App: React.FC = () => {
     analyzeFashion(selectedImage.base64Data, selectedImage.mimeType)
       .then(result => {
         setCritiqueState({ loading: false, data: result, error: null });
+        // Auto-save is now handled by useEffect
       })
       .catch(err => {
         const errorMsg = err.message?.includes("API Key") 
@@ -72,6 +123,26 @@ const App: React.FC = () => {
           : "분석 실패... AI가 도망갔나봐.";
         setCritiqueState({ loading: false, data: null, error: errorMsg });
       });
+  };
+
+  const handleDownloadResult = async () => {
+    if (!resultRef.current) return;
+
+    try {
+      const canvas = await html2canvas(resultRef.current, {
+        useCORS: true,
+        backgroundColor: '#111111', // Match background
+        scale: 2 // High res
+      });
+
+      const link = document.createElement('a');
+      link.download = `fashion-king-${Date.now()}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    } catch (err) {
+      console.error("Failed to capture image", err);
+      alert("이미지 저장에 실패했습니다.");
+    }
   };
 
   const resetApp = () => {
@@ -150,7 +221,7 @@ const App: React.FC = () => {
 
           {/* Result Section */}
           {selectedImage && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
+            <div ref={resultRef} className="grid grid-cols-1 lg:grid-cols-2 gap-10 p-4 rounded-3xl bg-[#111111]">
               
               {/* Left Column: Image Only */}
               <div className="space-y-4">
@@ -163,7 +234,7 @@ const App: React.FC = () => {
 
                   {/* Initial Start Overlay */}
                   {!critiqueState.loading && !critiqueState.data && (
-                     <div className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-[2px]">
+                     <div className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-[2px]" data-html2canvas-ignore>
                        <button 
                         onClick={handleStartProcess}
                         className="bg-white text-black text-xl font-bold py-4 px-10 rounded-full hover:scale-105 transition-all shadow-[0_0_20px_rgba(255,255,255,0.3)] border border-transparent hover:border-white/50"
@@ -181,12 +252,22 @@ const App: React.FC = () => {
                   )}
                 </div>
                 
-                <button 
-                  onClick={resetApp}
-                  className="w-full py-3 text-gray-500 hover:text-white transition-colors text-sm font-medium flex items-center justify-center gap-2 group"
-                >
-                  <span className="group-hover:-translate-x-1 transition-transform">←</span> 다른 사진 선택하기
-                </button>
+                <div className="flex gap-2" data-html2canvas-ignore>
+                  <button 
+                    onClick={resetApp}
+                    className="flex-1 py-3 text-gray-500 hover:text-white transition-colors text-sm font-medium flex items-center justify-center gap-2 group border border-gray-800 rounded-xl hover:bg-gray-800"
+                  >
+                    <span className="group-hover:-translate-x-1 transition-transform">←</span> 다시하기
+                  </button>
+                  {critiqueState.data && (
+                    <button 
+                      onClick={handleDownloadResult}
+                      className="flex-1 py-3 text-blue-400 hover:text-blue-300 transition-colors text-sm font-medium flex items-center justify-center gap-2 group border border-blue-900/30 rounded-xl hover:bg-blue-900/20"
+                    >
+                      <span>📥</span> 결과 저장
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Right Column: Critique Analysis */}
@@ -245,7 +326,7 @@ const App: React.FC = () => {
 
                          {/* Cover Overlay */}
                          {!showSpicy && (
-                           <div className="absolute inset-0 flex items-center justify-center z-10 bg-gradient-to-t from-[#1a1a1e] via-[#1a1a1e]/80 to-transparent">
+                           <div className="absolute inset-0 flex items-center justify-center z-10 bg-gradient-to-t from-[#1a1a1e] via-[#1a1a1e]/80 to-transparent" data-html2canvas-ignore>
                              <button 
                               onClick={() => setShowSpicy(true)}
                               className="bg-red-500/10 hover:bg-red-500/20 text-red-400 text-sm font-bold py-2 px-5 rounded-full border border-red-500/50 hover:border-red-400 transition-all backdrop-blur-md"
