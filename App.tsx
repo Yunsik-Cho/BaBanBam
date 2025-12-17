@@ -1,9 +1,13 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { analyzeFashion } from './services/geminiService';
 import { CritiqueResult, ImageFile } from './types';
+import ApiKeySettings from './components/ApiKeySettings';
+import { hasStoredKey } from './utils/storage';
 
 const App: React.FC = () => {
   const [selectedImage, setSelectedImage] = useState<ImageFile | null>(null);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [hasApiKey, setHasApiKey] = useState(false);
   
   // State for revealing spicy content
   const [showSpicy, setShowSpicy] = useState(false);
@@ -15,6 +19,10 @@ const App: React.FC = () => {
   }>({ loading: false, data: null, error: null });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    setHasApiKey(hasStoredKey());
+  }, []);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -43,6 +51,11 @@ const App: React.FC = () => {
   };
 
   const handleStartProcess = async () => {
+    if (!hasApiKey) {
+      setIsSettingsOpen(true);
+      return;
+    }
+
     if (!selectedImage) return;
 
     // 1. Start Analysis
@@ -54,7 +67,10 @@ const App: React.FC = () => {
         setCritiqueState({ loading: false, data: result, error: null });
       })
       .catch(err => {
-        setCritiqueState({ loading: false, data: null, error: "분석 실패... AI가 도망갔나봐." });
+        const errorMsg = err.message?.includes("API Key") 
+          ? "API 키를 확인해주세요." 
+          : "분석 실패... AI가 도망갔나봐.";
+        setCritiqueState({ loading: false, data: null, error: errorMsg });
       });
   };
 
@@ -74,7 +90,31 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-[#111111] text-gray-100 font-sans selection:bg-gray-700 selection:text-white pb-20">
-      
+      <ApiKeySettings 
+        isOpen={isSettingsOpen} 
+        onClose={() => setIsSettingsOpen(false)}
+        onKeyUpdate={(exists) => setHasApiKey(exists)}
+      />
+
+      <nav className="absolute top-0 right-0 p-6 z-20">
+        <button 
+          onClick={() => setIsSettingsOpen(true)}
+          className={`p-3 rounded-full transition-all border ${hasApiKey ? 'bg-gray-900 border-gray-800 text-gray-400 hover:text-white' : 'bg-red-500/10 border-red-500 text-red-500 hover:bg-red-500/20'}`}
+          title="API 설정"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+          {!hasApiKey && (
+            <span className="absolute top-2 right-2 flex h-3 w-3">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+            </span>
+          )}
+        </button>
+      </nav>
+
       <main className="container mx-auto max-w-5xl px-6 py-12 relative">
         {/* Header */}
         <header className="text-center mb-16">

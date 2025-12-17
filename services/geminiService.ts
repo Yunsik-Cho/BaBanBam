@@ -1,9 +1,30 @@
 import { GoogleGenAI, Type, Schema } from "@google/genai";
 import { CritiqueResult } from "../types";
+import { getApiKey } from "../utils/storage";
 
-// Helper to get a fresh instance with the selected key
+// Helper to get a fresh instance with the stored key
 const getAIClient = () => {
-  return new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const apiKey = getApiKey();
+  if (!apiKey) {
+    throw new Error("API Key is missing. Please set it in settings.");
+  }
+  return new GoogleGenAI({ apiKey });
+};
+
+// Test function to validate API Key
+export const validateApiKey = async (apiKey: string): Promise<boolean> => {
+  try {
+    const ai = new GoogleGenAI({ apiKey });
+    // Simple generation task to test auth
+    await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: { parts: [{ text: "Hello" }] }
+    });
+    return true;
+  } catch (error) {
+    console.error("API Key validation failed:", error);
+    return false;
+  }
 };
 
 export const analyzeFashion = async (base64Image: string, mimeType: string): Promise<CritiqueResult> => {
@@ -66,43 +87,6 @@ export const analyzeFashion = async (base64Image: string, mimeType: string): Pro
 };
 
 export const generateNoddingVideo = async (base64Image: string, mimeType: string): Promise<string> => {
-  const ai = getAIClient();
-  
-  // Prompt engineered for the specific request: crossed arms, looking forward, nodding.
-  // Using Veo fast preview for speed.
-  const prompt = "A medium shot of this person crossing their arms confidently, looking directly at the camera, and nodding their head slowly in approval. High quality, realistic texture, cinematic lighting.";
-
-  try {
-    let operation = await ai.models.generateVideos({
-      model: 'veo-3.1-fast-generate-preview',
-      image: {
-        imageBytes: base64Image,
-        mimeType: mimeType,
-      },
-      prompt: prompt,
-      config: {
-        numberOfVideos: 1,
-        resolution: '720p',
-        aspectRatio: '9:16' // Portrait for full body/person shots
-      }
-    });
-
-    // Polling loop
-    while (!operation.done) {
-      await new Promise(resolve => setTimeout(resolve, 5000)); // Check every 5 seconds
-      operation = await ai.operations.getVideosOperation({ operation: operation });
-      console.log("Veo status:", operation.metadata);
-    }
-
-    const videoUri = operation.response?.generatedVideos?.[0]?.video?.uri;
-    if (!videoUri) {
-      throw new Error("Video generation failed to return a URI.");
-    }
-
-    // Append API key for access
-    return `${videoUri}&key=${process.env.API_KEY}`;
-  } catch (error) {
-    console.error("Video generation failed", error);
-    throw error;
-  }
+  // Function disabled temporarily as per user request to avoid 404s
+  throw new Error("Video generation is currently disabled.");
 };
