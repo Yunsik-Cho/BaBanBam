@@ -1,3 +1,4 @@
+// @ts-ignore
 import { GoogleGenAI, Type, Schema } from "@google/genai";
 import { CritiqueResult } from "../types";
 import { getApiKey } from "../utils/storage";
