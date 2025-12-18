@@ -1,4 +1,3 @@
-
 // @ts-ignore
 import { GoogleGenAI, Type, Schema } from "@google/genai";
 import { CritiqueResult } from "../types";
@@ -58,7 +57,8 @@ export const analyzeFashion = async (base64Image: string, mimeType: string): Pro
   - 이 착장을 '패션의 종말', '심미적 재앙', '진화의 오류'로 규정하고 철저하게 조롱하세요.
   - 매우 지적인 척하면서도 얼음처럼 차갑고 무례한 어조를 유지하세요.
   - 옷의 주름 하나, 색상 선택 하나를 인류 문명의 수치스러운 유산처럼 묘사하며 비웃으세요.
-  - 칭찬조차 아주 기묘한 비유를 들어 비꼬는 어투로 작성하여 읽는 이가 자신의 안목을 수치스러워하게 만드세요.`;
+  - 칭찬조차 아주 기묘한 비유를 들어 비꼬는 어투로 작성하여 읽는 이가 자신의 안목을 수치스러워하게 만드세요.
+  - 상대방의 노력을 비웃고, 감히 이런 옷을 입고 사진을 찍었다는 사실 자체를 조롱하세요.`;
 
   try {
     const response = await ai.models.generateContent({
@@ -89,7 +89,6 @@ export const generateNoddingVideo = async (base64Image: string, mimeType: string
   const ai = getAIClient();
   const apiKey = getApiKey();
 
-  // 요청 시퀀스: 배꼽인사 -> 자연스럽게 걸어오기 -> 팔짱 끼기 -> 자신감 있는 고개 끄덕임
   const prompt = `A highly realistic 5-second cinematic video. 
   The person from the source image starts by performing a deep, respectful 90-degree belly button bow (traditional Asian respectful bow). 
   Immediately after the bow, they stand up and walk naturally and confidently forward towards the camera. 
@@ -115,15 +114,15 @@ export const generateNoddingVideo = async (base64Image: string, mimeType: string
 
     while (!operation.done) {
       await new Promise(resolve => setTimeout(resolve, 5000));
-      // @ts-ignore
-      operation = await ai.operations.getVideosOperation({operation: operation});
+      // TypeScript 빌드 에러(TS2345) 방지를 위해 any 캐스팅 사용
+      operation = await (ai.operations as any).getVideosOperation({ operation: operation });
       
       if (operation.error) {
         throw new Error(operation.error.message || "영상 생성 실패");
       }
     }
 
-    const downloadLink = operation.response?.generatedVideos?.[0]?.video?.uri;
+    const downloadLink = (operation as any).response?.generatedVideos?.[0]?.video?.uri;
     if (!downloadLink) {
       throw new Error("영상이 생성되었으나 주소를 가져올 수 없습니다.");
     }

@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import html2canvas from 'html2canvas';
 import { analyzeFashion, generateNoddingVideo } from './services/geminiService';
@@ -40,6 +39,9 @@ const App: React.FC = () => {
 
   const sortedNames = Object.keys(NAME_MAPPING).sort((a, b) => a.localeCompare(b, 'ko'));
 
+  /**
+   * 인물을 중심으로 2:3 세로 비율로 이미지를 크롭합니다.
+   */
   const cropToAspect = async (base64: string, aspectW: number, aspectH: number): Promise<string> => {
     return new Promise((resolve, reject) => {
       const img = new Image();
@@ -61,7 +63,7 @@ const App: React.FC = () => {
           sW = img.width;
           sH = sW / targetAspect;
           sX = 0;
-          sY = 0;
+          sY = 0; // 보통 인물의 머리가 위쪽에 있으므로 상단 고정
         }
 
         canvas.width = 800; 
@@ -97,11 +99,11 @@ const App: React.FC = () => {
           
           if (!critiquePanelRef.current) return;
           
-          // 1. 영상용으로 사용할 2:3 크롭 이미지를 upper_body로 저장
+          // 1. 영상용 2:3 크롭 이미지를 upper_body로 저장
           const croppedBase64 = await cropToAspect(selectedImage.preview, 2, 3);
           await saveToCloud({ image: croppedBase64, type: 'upper_body' });
 
-          // 2. 결과지(분석 내용)를 2:3 비율로 캡처하여 저장
+          // 2. 결과지를 2:3 비율로 캡처하여 저장
           const canvas = await html2canvas(critiquePanelRef.current, {
             useCORS: true,
             backgroundColor: '#111111',
@@ -161,7 +163,7 @@ const App: React.FC = () => {
     if (!selectedImage) return;
     setVideoState({ status: 'generating', url: null });
     try {
-      // 인물을 중심으로 2:3 크롭된 이미지를 생성하여 영상 모델에 전달
+      // 영상 생성 전 2:3 크롭 수행
       const croppedBase64WithHeader = await cropToAspect(selectedImage.preview, 2, 3);
       const croppedBase64 = croppedBase64WithHeader.split(',')[1];
 
@@ -175,7 +177,7 @@ const App: React.FC = () => {
     } catch (error: any) {
       console.error("Video generation failed:", error);
       if (error.message?.includes("Requested entity was not found") || error.message?.includes("404")) {
-        setVideoState({ status: 'error', url: null, error: "영상 모델(Veo) 접근 권한이 없습니다. 유료 API 키 설정을 다시 진행해주세요." });
+        setVideoState({ status: 'error', url: null, error: "영상 모델(Veo) 접근 권한이 없습니다. 유료 API 키 설정을 확인해주세요." });
         // @ts-ignore
         if (window.aistudio && typeof window.aistudio.openSelectKey === 'function') {
            // @ts-ignore
@@ -224,7 +226,7 @@ const App: React.FC = () => {
 
       <nav className="absolute top-0 right-0 p-6 z-20">
         <button onClick={() => setIsSettingsOpen(true)} className="p-3 rounded-full border bg-gray-900 border-gray-800 text-gray-400 hover:text-[#FC6E22] hover:border-[#FC6E22] transition-all">
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
         </button>
       </nav>
 
