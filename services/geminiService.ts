@@ -121,22 +121,20 @@ export const generateNoddingVideo = async (base64Image: string, mimeType: string
   const ai = getAIClient();
   const apiKey = getApiKey();
 
-  // Veo prompt updated for strict facial identity and short duration
-  const prompt = `A short 5-second cinematic video of the exact person provided in the image.
-  The person crosses their arms confidently, looks directly at the camera with a cool expression, and nods slowly in approval.
-  IMPORTANT: Preserve the facial features, identity, hairstyle, and outfit details EXACTLY as they appear in the original image. Do not change the face.
-  Photorealistic, high quality, consistent lighting.`;
+  // Optimized prompt for "walking forward, welcome, arm cross, nod" scenario
+  const prompt = `A short 5-second cinematic 4k video of the exact same person from the source image.
+  Scenario: The person is walking forward towards the camera with a confident and stylish stride. They are surrounded by a warm, welcoming atmosphere with soft, celebratory background lighting.
+  As they reach a close-up position, they stop, confidently cross their arms over their chest, and give a slow, firm, cool nod of approval while looking directly into the camera lens.
+  CRITICAL IDENTITY PRESERVATION: The person's face, eyes, detailed hairstyle, and outfit must remain EXACTLY identical to the source image throughout the entire sequence. No facial morphing or changes in proportions.
+  High-quality photorealistic rendering, natural cinematic lighting, professional color grading.`;
 
   try {
-    // Check if generateVideos is available on the SDK instance
     // @ts-ignore
     if (typeof ai.models.generateVideos !== 'function') {
-      console.error("Available models methods:", Object.keys(ai.models));
-      throw new Error("Video generation is not supported in the currently loaded @google/genai SDK version. Please ensure strict version control.");
+      throw new Error("Video generation is not supported in the currently loaded @google/genai SDK version.");
     }
 
-    // Switch to High Quality model (Veo 3.1)
-    // @ts-ignore - The 'generateVideos' method is experimental and may be missing from types
+    // @ts-ignore
     let operation = await ai.models.generateVideos({
       model: 'veo-3.1-generate-preview',
       prompt: prompt,
@@ -147,14 +145,13 @@ export const generateNoddingVideo = async (base64Image: string, mimeType: string
       config: {
         numberOfVideos: 1,
         resolution: '720p',
-        aspectRatio: '9:16' // Portrait for fashion vibes
+        aspectRatio: '9:16'
       }
     });
 
-    // Poll for completion - High quality model takes longer
     while (!operation.done) {
-      await new Promise(resolve => setTimeout(resolve, 10000)); // Check every 10 seconds for HQ model
-      // @ts-ignore - The 'getVideosOperation' method is experimental
+      await new Promise(resolve => setTimeout(resolve, 10000));
+      // @ts-ignore
       operation = await ai.operations.getVideosOperation({operation: operation});
     }
 
@@ -163,8 +160,6 @@ export const generateNoddingVideo = async (base64Image: string, mimeType: string
       throw new Error("Failed to generate video URI");
     }
 
-    // Fetch the video content using the API key to create a local blob URL
-    // This avoids CORS/Auth issues when putting the raw URI in a video tag
     const response = await fetch(`${videoUri}&key=${apiKey}`);
     if (!response.ok) {
       throw new Error(`Failed to download video: ${response.statusText}`);
