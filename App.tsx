@@ -104,15 +104,19 @@ const App: React.FC = () => {
             backgroundColor: '#111111',
             scale: 2,
             logging: false,
+            // 캡처 시 여백 최소화를 위해 너비 고정 대신 실제 렌더링된 너비 사용
+            width: critiquePanelRef.current.offsetWidth,
+            height: critiquePanelRef.current.offsetHeight
           });
           
+          // 동적으로 2:3 비율 맞추기 (너비 기준 여백 최소화)
           let finalW = canvas.width;
-          let finalH = canvas.height;
+          let finalH = canvas.width * 1.5; // 너비 기반 2:3 높이
           
-          if (finalW < finalH * (2/3)) {
+          // 만약 실제 내용 높이가 계산된 높이보다 크다면 높이 기준으로 너비를 재조정
+          if (canvas.height > finalH) {
+            finalH = canvas.height;
             finalW = finalH * (2/3);
-          } else {
-            finalH = finalW * (3/2);
           }
 
           const finalCanvas = document.createElement('canvas');
@@ -123,6 +127,7 @@ const App: React.FC = () => {
             fCtx.fillStyle = '#111111';
             fCtx.fillRect(0, 0, finalW, finalH);
             
+            // 중앙 배치 (너비가 일치하면 x는 0이 됨)
             const x = (finalW - canvas.width) / 2;
             const y = (finalH - canvas.height) / 2;
             fCtx.drawImage(canvas, x, y);
@@ -254,11 +259,13 @@ const App: React.FC = () => {
 
             {critiqueState.data && (
               <div className="flex flex-col items-center gap-8 w-full max-w-3xl">
+                {/* 실제 분석 결과 (캡처 대상) - 여백 최소화를 위해 p-4 md:p-6 수준으로 조정 */}
                 <div 
                   ref={critiquePanelRef} 
-                  className="w-full bg-[#111111] border border-gray-800/50 shadow-2xl overflow-hidden flex flex-col p-10 md:p-14 justify-center gap-8 min-h-[800px] h-auto"
+                  className="w-full bg-[#111111] border border-gray-800/50 shadow-2xl overflow-hidden flex flex-col p-6 md:p-10 justify-center gap-6 min-h-[800px] h-auto"
                 >
-                  <div className="flex-1 flex flex-col gap-10 animate-fadeIn">
+                  <div className="flex-1 flex flex-col gap-8 animate-fadeIn">
+                    {/* 축소된 Total Score */}
                     <div className="bg-[#1a1a1e] rounded-3xl p-4 border border-gray-800 shadow-xl flex flex-col items-center justify-center w-fit mx-auto px-12">
                       <h2 className="text-gray-500 text-[10px] font-bold uppercase mb-1 tracking-widest">TOTAL SCORE</h2>
                       <div className="flex items-center gap-2">
@@ -267,14 +274,16 @@ const App: React.FC = () => {
                       </div>
                     </div>
 
-                    <div className="bg-[#1a1a1e] rounded-3xl p-10 border border-gray-800/50 shadow-lg">
+                    {/* AI 분석 Section - 너비 가득 채우기 */}
+                    <div className="bg-[#1a1a1e] rounded-3xl p-10 border border-gray-800/50 shadow-lg w-full">
                       <h3 className="text-[11px] font-bold text-[#FC6E22]/80 uppercase mb-5 tracking-widest border-b border-[#FC6E22]/20 pb-2">AI 분석</h3>
                       <p className="text-gray-100 leading-snug text-3xl md:text-4xl font-bold italic">
                         "{critiqueState.data.gentleCritique}"
                       </p>
                     </div>
 
-                    <div className="bg-[#1a1a1e] rounded-3xl p-10 border border-red-900/20 relative overflow-hidden shadow-lg flex-1 flex flex-col min-h-[300px]">
+                    {/* 바보이반식 분석 Section - 너비 가득 채우기 */}
+                    <div className="bg-[#1a1a1e] rounded-3xl p-10 border border-red-900/20 relative overflow-hidden shadow-lg flex-1 flex flex-col min-h-[300px] w-full">
                       <h3 className="text-[11px] font-bold text-red-500/80 uppercase mb-5 tracking-widest border-b border-red-900/20 pb-2">바보이반식 분석</h3>
                       <div className="relative flex-1 flex items-center">
                         <p className={`text-gray-200 leading-relaxed text-2xl md:text-3xl font-bold transition-all duration-700 ${showSpicy ? '' : 'blur-3xl opacity-5 select-none'}`}>
