@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import html2canvas from 'html2canvas';
 import { analyzeFashion, generateNoddingVideo } from './services/geminiService';
@@ -30,7 +31,6 @@ const App: React.FC = () => {
   });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const resultRef = useRef<HTMLDivElement>(null);
   const critiquePanelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -39,9 +39,6 @@ const App: React.FC = () => {
 
   const sortedNames = Object.keys(NAME_MAPPING).sort((a, b) => a.localeCompare(b, 'ko'));
 
-  /**
-   * 인물을 중심으로 2:3 세로 비율로 이미지를 크롭합니다.
-   */
   const cropToAspect = async (base64: string, aspectW: number, aspectH: number): Promise<string> => {
     return new Promise((resolve, reject) => {
       const img = new Image();
@@ -63,7 +60,7 @@ const App: React.FC = () => {
           sW = img.width;
           sH = sW / targetAspect;
           sX = 0;
-          sY = 0; // 인물 머리 위주 상단 크롭
+          sY = 0; 
         }
 
         canvas.width = 800; 
@@ -79,12 +76,12 @@ const App: React.FC = () => {
   };
 
   const saveToCloud = async (payload: { image?: string; video?: string; type: 'upper_body' | 'result' | 'video' }) => {
-    if (!userName || !NAME_MAPPING[userName]) return;
+    if (!userName || !NAME_MAPPING[userName.trim()]) return;
     try {
       await fetch('/api/save-result', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...payload, userId: NAME_MAPPING[userName], type: payload.type })
+        body: JSON.stringify({ ...payload, userId: NAME_MAPPING[userName.trim()], type: payload.type })
       });
     } catch (e) { console.warn('Auto-save failed', e); }
   };
@@ -99,28 +96,36 @@ const App: React.FC = () => {
           
           if (!critiquePanelRef.current) return;
           
-          // 1. 영상용으로 사용할 인물 중심 2:3 크롭 이미지를 upper_body로 저장
           const croppedBase64 = await cropToAspect(selectedImage.preview, 2, 3);
           await saveToCloud({ image: croppedBase64, type: 'upper_body' });
 
-          // 2. 결과지를 2:3 비율로 캡처하여 저장
           const canvas = await html2canvas(critiquePanelRef.current, {
             useCORS: true,
             backgroundColor: '#111111',
             scale: 2,
+            logging: false,
           });
           
+          let finalW = canvas.width;
+          let finalH = canvas.height;
+          
+          if (finalW < finalH * (2/3)) {
+            finalW = finalH * (2/3);
+          } else {
+            finalH = finalW * (3/2);
+          }
+
           const finalCanvas = document.createElement('canvas');
-          finalCanvas.width = 800;
-          finalCanvas.height = 1200;
+          finalCanvas.width = finalW;
+          finalCanvas.height = finalH;
           const fCtx = finalCanvas.getContext('2d');
           if (fCtx) {
             fCtx.fillStyle = '#111111';
-            fCtx.fillRect(0, 0, 800, 1200);
-            const scale = Math.min(800 / canvas.width, 1200 / canvas.height);
-            const x = (800 - (canvas.width * scale)) / 2;
-            const y = (1200 - (canvas.height * scale)) / 2;
-            fCtx.drawImage(canvas, 0, 0, canvas.width, canvas.height, x, y, canvas.width * scale, canvas.height * scale);
+            fCtx.fillRect(0, 0, finalW, finalH);
+            
+            const x = (finalW - canvas.width) / 2;
+            const y = (finalH - canvas.height) / 2;
+            fCtx.drawImage(canvas, x, y);
           }
           
           const resultBase64 = finalCanvas.toDataURL('image/jpeg', 0.85);
@@ -163,7 +168,6 @@ const App: React.FC = () => {
     if (!selectedImage) return;
     setVideoState({ status: 'generating', url: null });
     try {
-      // 영상 생성 전 인물을 중심으로 2:3 크롭 수행
       const croppedBase64WithHeader = await cropToAspect(selectedImage.preview, 2, 3);
       const croppedBase64 = croppedBase64WithHeader.split(',')[1];
 
@@ -188,18 +192,6 @@ const App: React.FC = () => {
       }
     }
   };
-
-  const renderDetailBar = (label: string, score: number) => (
-    <div className="mb-2">
-      <div className="flex justify-between text-xs mb-1">
-        <span className="text-gray-400 font-medium">{label}</span>
-        <span className={`font-bold ${score >= 70 ? 'text-green-400' : 'text-[#FC6E22]'}`}>{score}</span>
-      </div>
-      <div className="h-2 bg-gray-800 rounded-full overflow-hidden">
-        <div className="h-full bg-[#FC6E22] transition-all duration-1000 ease-out" style={{ width: `${score}%` }} />
-      </div>
-    </div>
-  );
 
   return (
     <div className="min-h-screen bg-[#111111] text-gray-100 font-sans pb-20">
@@ -230,8 +222,8 @@ const App: React.FC = () => {
         </button>
       </nav>
 
-      <main className="container mx-auto max-w-5xl px-6 py-12 relative">
-        <header className="text-center mb-16">
+      <main className="container mx-auto max-w-5xl px-6 py-12 relative flex flex-col items-center">
+        <header className="text-center mb-10 w-full">
           <div className="inline-block px-4 py-1 rounded-full bg-orange-500/10 text-[#FC6E22] text-xs font-bold mb-4 border border-[#FC6E22]/20 uppercase tracking-widest">
             Welcome, {userName}
           </div>
@@ -240,93 +232,105 @@ const App: React.FC = () => {
         </header>
 
         {selectedImage && (
-          <div ref={resultRef} className="grid grid-cols-1 lg:grid-cols-2 gap-10 p-4 rounded-3xl bg-[#111111]">
-            <div className="space-y-4">
-              <div className="relative rounded-2xl overflow-hidden bg-black shadow-2xl ring-1 ring-white/10 min-h-[400px]">
-                {videoState.status === 'completed' && videoState.url ? (
-                  <video src={videoState.url} autoPlay loop playsInline controls className="w-full h-auto" />
-                ) : (
-                  <img src={selectedImage.preview} alt="Upload" className="w-full h-auto" />
-                )}
-                {videoState.status === 'generating' && (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 backdrop-blur-sm z-20 p-6 text-center">
-                    <div className="w-12 h-12 border-4 border-[#FC6E22] border-t-transparent rounded-full animate-spin mb-4"></div>
-                    <p className="text-white font-bold text-lg">AI가 당신의 모습을 생생하게 만드는 중...</p>
-                    <p className="text-gray-400 text-sm mt-2">정중한 인사와 함께 당신의 패션이 영상으로 완성됩니다.</p>
-                  </div>
-                )}
-                {videoState.status === 'error' && (
-                   <div className="absolute inset-0 flex flex-col items-center justify-center bg-red-900/20 backdrop-blur-sm z-20 p-6 text-center">
-                    <p className="text-red-400 font-bold mb-4">{videoState.error}</p>
-                    <button onClick={handleGenerateVideo} className="bg-white text-black py-2 px-6 rounded-full text-sm font-bold">다시 시도</button>
-                   </div>
-                )}
-                {!critiqueState.loading && !critiqueState.data && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-[2px]" data-html2canvas-ignore>
-                    <button onClick={handleStartProcess} className="bg-white text-black text-xl font-bold py-4 px-10 rounded-full shadow-2xl hover:scale-105 transition-transform">측정하기</button>
-                  </div>
-                )}
-              </div>
-              <div className="flex flex-col gap-2" data-html2canvas-ignore>
-                <div className="flex gap-2">
-                  <button onClick={() => { setSelectedImage(null); setCritiqueState({loading: false, data: null, error: null}); setVideoState({status: 'idle', url: null}); }} className="flex-1 py-3 text-gray-500 border border-gray-800 rounded-xl hover:bg-gray-800 text-sm">다시하기</button>
+          <div className="w-full flex flex-col items-center gap-10">
+            {!critiqueState.data && !critiqueState.loading && (
+              <div className="w-full max-w-md relative rounded-3xl overflow-hidden bg-black shadow-2xl ring-1 ring-white/10 aspect-[2/3]">
+                <img src={selectedImage.preview} alt="Upload" className="w-full h-full object-cover" />
+                <div className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-[2px]">
+                  <button onClick={handleStartProcess} className="bg-white text-black text-xl font-bold py-4 px-10 rounded-full shadow-2xl hover:scale-105 transition-transform">측정하기</button>
                 </div>
-                {critiqueState.data && videoState.status === 'idle' && (
-                  <button onClick={handleGenerateVideo} className="w-full py-4 bg-gradient-to-r from-[#FC6E22]/20 to-[#FC6E22]/40 border border-[#FC6E22]/30 rounded-xl text-white font-bold hover:brightness-125 transition-all">🎬 패션왕 인정 영상 만들기</button>
-                )}
               </div>
-            </div>
+            )}
 
-            <div ref={critiquePanelRef} className="flex flex-col gap-5 p-4 bg-[#111111] rounded-2xl">
-              {critiqueState.loading && (
-                <div className="flex-1 bg-[#1a1a1e] rounded-2xl p-8 flex flex-col items-center justify-center space-y-4">
-                  <div className="w-8 h-8 border-2 border-white/20 border-t-[#FC6E22] rounded-full animate-spin"></div>
-                  <p className="text-gray-400">심사위원들의 논의가 진행 중입니다...</p>
+            {critiqueState.loading && (
+              <div className="w-full flex flex-col items-center justify-center min-h-[500px] space-y-6">
+                <div className="w-16 h-16 border-4 border-white/10 border-t-[#FC6E22] rounded-full animate-spin"></div>
+                <div className="text-center space-y-2">
+                  <p className="text-xl font-bold text-white">심사위원들의 냉철한 토론이 진행 중입니다...</p>
+                  <p className="text-gray-500 font-medium italic">"이 색감... 정말 최선인가요?"</p>
                 </div>
-              )}
-              {critiqueState.data && (
-                <div className="flex-1 space-y-5 animate-fadeIn">
-                  <div className="bg-[#1a1a1e] rounded-2xl p-6 border border-gray-800">
-                    <h2 className="text-gray-400 text-sm font-bold uppercase mb-2">Total Score</h2>
-                    <div className="flex items-baseline gap-2 mb-4">
-                      <span className="text-7xl font-display font-bold text-[#FC6E22]">{critiqueState.data.totalScore}</span>
-                      <span className="text-xl text-gray-600">/ 100</span>
+              </div>
+            )}
+
+            {critiqueState.data && (
+              <div className="flex flex-col items-center gap-8 w-full max-w-3xl">
+                <div 
+                  ref={critiquePanelRef} 
+                  className="w-full bg-[#111111] border border-gray-800/50 shadow-2xl overflow-hidden flex flex-col p-10 md:p-14 justify-center gap-8 min-h-[800px] h-auto"
+                >
+                  <div className="flex-1 flex flex-col gap-10 animate-fadeIn">
+                    <div className="bg-[#1a1a1e] rounded-3xl p-4 border border-gray-800 shadow-xl flex flex-col items-center justify-center w-fit mx-auto px-12">
+                      <h2 className="text-gray-500 text-[10px] font-bold uppercase mb-1 tracking-widest">TOTAL SCORE</h2>
+                      <div className="flex items-center gap-2">
+                        <span className="text-5xl font-display font-bold text-[#FC6E22] leading-none">{critiqueState.data.totalScore}</span>
+                        <span className="text-base text-gray-700 font-bold pt-2">/ 100</span>
+                      </div>
                     </div>
-                    <div className="text-lg font-medium text-white pl-4 border-l-2 border-[#FC6E22]/50">"{critiqueState.data.oneLiner}"</div>
-                    <div className="mt-6 space-y-2">
-                      {renderDetailBar('분위기', critiqueState.data.details.face)}
-                      {renderDetailBar('색감', critiqueState.data.details.color)}
-                      {renderDetailBar('비율', critiqueState.data.details.ratio)}
-                      {renderDetailBar('조합', critiqueState.data.details.combination)}
-                      {renderDetailBar('아이템', critiqueState.data.details.item)}
+
+                    <div className="bg-[#1a1a1e] rounded-3xl p-10 border border-gray-800/50 shadow-lg">
+                      <h3 className="text-[11px] font-bold text-[#FC6E22]/80 uppercase mb-5 tracking-widest border-b border-[#FC6E22]/20 pb-2">AI 분석</h3>
+                      <p className="text-gray-100 leading-snug text-3xl md:text-4xl font-bold italic">
+                        "{critiqueState.data.gentleCritique}"
+                      </p>
                     </div>
-                  </div>
-                  <div className="bg-[#1a1a1e] rounded-2xl p-6 border border-gray-800">
-                    <h3 className="text-lg font-bold text-white mb-3">AI 분석</h3>
-                    <p className="text-gray-300 leading-relaxed text-[15px]">{critiqueState.data.gentleCritique}</p>
-                  </div>
-                  <div className="bg-[#1a1a1e] rounded-2xl p-6 border border-red-900/30 relative overflow-hidden">
-                    <h3 className="text-lg font-bold text-red-400 mb-3">AI의 솔직한 분석</h3>
-                    <div className="relative min-h-[100px]">
-                      <p className={`text-gray-300 leading-relaxed text-[15px] transition-all duration-700 ${showSpicy ? '' : 'blur-lg opacity-30 select-none'}`}>{critiqueState.data.sincereCritique}</p>
-                      {!showSpicy && (
-                        <div className="absolute inset-0 flex items-center justify-center" data-html2canvas-ignore>
-                          <button onClick={() => setShowSpicy(true)} className="bg-red-500/10 text-red-400 font-bold py-2 px-5 rounded-full border border-red-500/50 hover:bg-red-500/20 transition-all font-fun text-lg">후기 보기 (매운맛)</button>
-                        </div>
-                      )}
+
+                    <div className="bg-[#1a1a1e] rounded-3xl p-10 border border-red-900/20 relative overflow-hidden shadow-lg flex-1 flex flex-col min-h-[300px]">
+                      <h3 className="text-[11px] font-bold text-red-500/80 uppercase mb-5 tracking-widest border-b border-red-900/20 pb-2">바보이반식 분석</h3>
+                      <div className="relative flex-1 flex items-center">
+                        <p className={`text-gray-200 leading-relaxed text-2xl md:text-3xl font-bold transition-all duration-700 ${showSpicy ? '' : 'blur-3xl opacity-5 select-none'}`}>
+                          {critiqueState.data.sincereCritique}
+                        </p>
+                        {!showSpicy && (
+                          <div className="absolute inset-0 flex items-center justify-center" data-html2canvas-ignore>
+                            <button onClick={() => setShowSpicy(true)} className="bg-red-500/10 text-red-400 font-bold py-4 px-10 rounded-full border border-red-500/40 hover:bg-red-500/20 transition-all font-fun text-2xl shadow-2xl">
+                              후기 보기 (매운맛)
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
-              )}
-            </div>
+
+                <div className="w-full flex flex-col gap-4" data-html2canvas-ignore>
+                  {videoState.status === 'idle' && (
+                    <button onClick={handleGenerateVideo} className="w-full py-5 bg-gradient-to-r from-[#FC6E22]/30 to-[#FC6E22]/60 border border-[#FC6E22]/40 rounded-2xl text-white font-bold hover:brightness-125 transition-all text-xl shadow-2xl">
+                      🎬 패션왕 인정 영상 만들기
+                    </button>
+                  )}
+                  
+                  {videoState.status === 'generating' && (
+                    <div className="w-full bg-gray-900/50 rounded-2xl p-8 border border-gray-800 flex flex-col items-center gap-4">
+                      <div className="w-10 h-10 border-4 border-[#FC6E22] border-t-transparent rounded-full animate-spin"></div>
+                      <div className="text-center">
+                        <p className="text-white font-bold text-lg">AI가 당신의 모습을 생생하게 만드는 중...</p>
+                        <p className="text-gray-500 text-sm">당신의 패션이 영상으로 완성됩니다.</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {videoState.status === 'completed' && videoState.url && (
+                    <div className="w-full bg-gray-900 rounded-2xl p-4 border border-gray-800 shadow-xl">
+                       <video src={videoState.url} autoPlay loop playsInline controls className="w-full rounded-xl mb-4 aspect-[9/16] bg-black" />
+                       <p className="text-center text-[#FC6E22] font-bold">✨ 패션왕 인정 영상이 생성되었습니다!</p>
+                    </div>
+                  )}
+
+                  <button onClick={() => { setSelectedImage(null); setCritiqueState({loading: false, data: null, error: null}); setVideoState({status: 'idle', url: null}); }} className="w-full py-4 text-gray-500 border border-gray-800 rounded-xl hover:bg-gray-800 hover:text-white text-base font-medium transition-all">
+                    새로운 사진으로 다시하기
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
-        {!selectedImage && (
-          <div onClick={() => fileInputRef.current?.click()} className="border-2 border-dashed border-gray-700 hover:border-[#FC6E22]/50 hover:bg-[#1a1a1a] rounded-2xl h-[400px] flex flex-col items-center justify-center cursor-pointer bg-[#161616] transition-all">
+        {!selectedImage && !critiqueState.loading && (
+          <div onClick={() => fileInputRef.current?.click()} className="w-full max-w-lg border-2 border-dashed border-gray-700 hover:border-[#FC6E22]/50 hover:bg-[#1a1a1a] rounded-2xl h-[450px] flex flex-col items-center justify-center cursor-pointer bg-[#161616] transition-all shadow-xl group">
             <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/*" className="hidden" />
-            <div className="text-6xl mb-6 text-gray-600">📸</div>
-            <p className="text-3xl font-display text-gray-300">사진 업로드</p>
+            <div className="text-7xl mb-6 text-gray-600 group-hover:scale-110 transition-transform">📸</div>
+            <p className="text-3xl font-display text-gray-300">전신 사진 업로드</p>
+            <p className="text-gray-500 mt-2 font-medium">심사위원들이 당신의 착장을 기다리고 있습니다</p>
           </div>
         )}
       </main>
