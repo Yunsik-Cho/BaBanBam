@@ -63,7 +63,7 @@ const App: React.FC = () => {
           sW = img.width;
           sH = sW / targetAspect;
           sX = 0;
-          sY = 0; // 보통 인물의 머리가 위쪽에 있으므로 상단 고정
+          sY = 0; // 인물 머리 위주 상단 크롭
         }
 
         canvas.width = 800; 
@@ -99,7 +99,7 @@ const App: React.FC = () => {
           
           if (!critiquePanelRef.current) return;
           
-          // 1. 영상용 2:3 크롭 이미지를 upper_body로 저장
+          // 1. 영상용으로 사용할 인물 중심 2:3 크롭 이미지를 upper_body로 저장
           const croppedBase64 = await cropToAspect(selectedImage.preview, 2, 3);
           await saveToCloud({ image: croppedBase64, type: 'upper_body' });
 
@@ -163,7 +163,7 @@ const App: React.FC = () => {
     if (!selectedImage) return;
     setVideoState({ status: 'generating', url: null });
     try {
-      // 영상 생성 전 2:3 크롭 수행
+      // 영상 생성 전 인물을 중심으로 2:3 크롭 수행
       const croppedBase64WithHeader = await cropToAspect(selectedImage.preview, 2, 3);
       const croppedBase64 = croppedBase64WithHeader.split(',')[1];
 

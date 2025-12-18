@@ -58,7 +58,7 @@ export const analyzeFashion = async (base64Image: string, mimeType: string): Pro
   - 매우 지적인 척하면서도 얼음처럼 차갑고 무례한 어조를 유지하세요.
   - 옷의 주름 하나, 색상 선택 하나를 인류 문명의 수치스러운 유산처럼 묘사하며 비웃으세요.
   - 칭찬조차 아주 기묘한 비유를 들어 비꼬는 어투로 작성하여 읽는 이가 자신의 안목을 수치스러워하게 만드세요.
-  - 상대방의 노력을 비웃고, 감히 이런 옷을 입고 사진을 찍었다는 사실 자체를 조롱하세요.`;
+  - 상대방의 노력을 비웃고, 감히 이런 옷을 입고 사진을 찍었다는 사실 자체를 조롱하며, 인류의 미적 기준이 이토록 처참해졌음에 탄식하세요.`;
 
   try {
     const response = await ai.models.generateContent({
@@ -98,7 +98,7 @@ export const generateNoddingVideo = async (base64Image: string, mimeType: string
 
   try {
     // @ts-ignore
-    let operation = await ai.models.generateVideos({
+    let operation: any = await ai.models.generateVideos({
       model: 'veo-3.1-fast-generate-preview',
       prompt: prompt,
       image: {
@@ -113,9 +113,9 @@ export const generateNoddingVideo = async (base64Image: string, mimeType: string
     });
 
     while (!operation.done) {
-      await new Promise(resolve => setTimeout(resolve, 5000));
-      // TypeScript 빌드 에러(TS2345) 방지를 위해 any 캐스팅 사용
-      operation = await (ai.operations as any).getVideosOperation({ operation: operation });
+      await new Promise(resolve => setTimeout(resolve, 10000));
+      // TypeScript 빌드 에러(TS2345) 방지를 위해 파라미터와 호출부 전체에 any 캐스팅 적용
+      operation = await (ai.operations as any).getVideosOperation({ operation } as any);
       
       if (operation.error) {
         throw new Error(operation.error.message || "영상 생성 실패");
