@@ -1,34 +1,24 @@
-// @ts-ignore
-import { GoogleGenAI, Type, Schema } from "@google/genai";
-import { CritiqueResult } from "../types";
-import { getApiKey } from "../utils/storage";
 
-const getAIClient = () => {
-  const apiKey = getApiKey();
-  if (!apiKey) {
-    throw new Error("API Key is missing. Please set it in settings.");
-  }
-  return new GoogleGenAI({ apiKey });
+import { GoogleGenAI, Type } from "@google/genai";
+import { CritiqueResult } from "../types";
+
+// Helper to check for specific API error regarding key/project selection
+const isNotFoundError = (error: any) => {
+  const msg = error?.message || (typeof error === 'string' ? error : "");
+  return msg.includes("Requested entity was not found");
 };
 
-export const validateApiKey = async (apiKey: string): Promise<boolean> => {
-  try {
-    const ai = new GoogleGenAI({ apiKey });
-    await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: { parts: [{ text: "Hello" }] }
-    });
-    return true;
-  } catch (error) {
-    console.error("API Key validation failed:", error);
-    return false;
-  }
+// Helper to check for quota exhaustion (429 error)
+const isQuotaExceededError = (error: any) => {
+  const msg = error?.message || (typeof error === 'string' ? error : "");
+  return msg.includes("quota") || msg.includes("exhausted") || msg.includes("429");
 };
 
 export const analyzeFashion = async (base64Image: string, mimeType: string): Promise<CritiqueResult> => {
-  const ai = getAIClient();
+  // Create a new instance right before the call to ensure the latest API key is used
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
   
-  const schema: Schema = {
+  const schema = {
     type: Type.OBJECT,
     properties: {
       totalScore: { type: Type.NUMBER, description: "Total score 0-100" },
@@ -62,7 +52,7 @@ export const analyzeFashion = async (base64Image: string, mimeType: string): Pro
 
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
+      model: "gemini-3-pro-preview",
       contents: {
         parts: [
           { inlineData: { mimeType, data: base64Image } },
@@ -75,71 +65,121 @@ export const analyzeFashion = async (base64Image: string, mimeType: string): Pro
       }
     });
 
-    if (response.text) {
-      return JSON.parse(response.text) as CritiqueResult;
+    const resultText = response.text;
+    if (resultText) {
+      return JSON.parse(resultText) as CritiqueResult;
     }
-    throw new Error("No response text");
-  } catch (error) {
+    throw new Error("분석 결과를 생성하지 못했습니다.");
+  } catch (error: any) {
     console.error("Fashion analysis failed", error);
+    if (isNotFoundError(error)) {
+       throw new Error("Requested entity was not found.");
+    }
     throw error;
   }
 };
 
-export const generateNoddingVideo = async (base64Image: string, mimeType: string): Promise<string> => {
-  const ai = getAIClient();
-  const apiKey = getApiKey();
+/**
+ * 영상 생성을 담당하는 내부 함수
+ */
+const performVideoGeneration = async (modelName: string, base64Image: string, mimeType: string, prompt: string): Promise<string> => {
+  const apiKey = process.env.API_KEY as string;
+  const ai = new GoogleGenAI({ apiKey: apiKey });
 
-  const prompt = `A highly realistic 5-second cinematic video. 
-  The person from the source image starts by performing a deep, respectful 90-degree belly button bow (traditional Asian respectful bow). 
-  Immediately after the bow, they stand up and walk naturally and confidently forward towards the camera. 
-  As they reach a medium distance, they stop, cross their arms confidently over their chest, and give a slow, firm, and proud nod of approval while looking directly into the camera lens with a subtle smile. 
-  The person's face, hair, and entire outfit must remain 100% identical to the source photo. 
-  Consistent background, high-quality cinematic lighting, photorealistic 4k rendering.`;
-
-  try {
-    // @ts-ignore
-    let operation: any = await ai.models.generateVideos({
-      model: 'veo-3.1-fast-generate-preview',
-      prompt: prompt,
-      image: {
-        imageBytes: base64Image,
-        mimeType: mimeType,
-      },
-      config: {
-        numberOfVideos: 1,
-        resolution: '720p',
-        aspectRatio: '9:16'
-      }
-    });
-
-    while (!operation.done) {
-      await new Promise(resolve => setTimeout(resolve, 10000));
-      // TypeScript 빌드 에러(TS2345) 방지를 위해 파라미터와 호출부 전체에 any 캐스팅 적용
-      operation = await (ai.operations as any).getVideosOperation({ operation } as any);
-      
-      if (operation.error) {
-        throw new Error(operation.error.message || "영상 생성 실패");
-      }
+  let operation = await ai.models.generateVideos({
+    model: modelName,
+    prompt: prompt,
+    image: {
+      imageBytes: base64Image,
+      mimeType: mimeType,
+    },
+    config: {
+      numberOfVideos: 1,
+      resolution: '720p',
+      aspectRatio: '9:16'
     }
+  });
 
-    const downloadLink = (operation as any).response?.generatedVideos?.[0]?.video?.uri;
-    if (!downloadLink) {
-      throw new Error("영상이 생성되었으나 주소를 가져올 수 없습니다.");
-    }
-
-    const response = await fetch(`${downloadLink}&key=${apiKey}`);
-    if (!response.ok) {
-      if (response.status === 404) {
-        throw new Error("Requested entity was not found. API Key 권한이나 프로젝트 설정을 확인해주세요.");
-      }
-      throw new Error(`영상 다운로드 실패: ${response.statusText}`);
-    }
+  // Operation polling loop
+  while (!operation.done) {
+    await new Promise(resolve => setTimeout(resolve, 10000));
+    const aiPoll = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
+    operation = await aiPoll.operations.getVideosOperation({ operation: operation as any });
     
-    const blob = await response.blob();
-    return URL.createObjectURL(blob);
-
-  } catch (error: any) {
-    console.error("Video generation error:", error);
-    throw error;
+    const opAny = operation as any;
+    if (opAny.error) {
+      throw new Error((opAny.error.message as string) || "영상 생성 중 서버 오류가 발생했습니다.");
+    }
   }
+
+  const responseData = (operation as any).response;
+  
+  // 안전 필터링(RAI) 체크
+  if (responseData?.raiMediaFilteredCount > 0) {
+    console.warn("RAI Filtered Response:", JSON.stringify(responseData, null, 2));
+    const reason = responseData.raiMediaFilteredReasons?.[0] || "입력 데이터나 프롬프트가 안전 정책에 의해 차단되었습니다.";
+    throw new Error(`안전 정책에 의해 차단됨: ${reason}`);
+  }
+
+  const downloadLink = responseData?.generatedVideos?.[0]?.video?.uri;
+
+  if (!downloadLink) {
+    throw new Error("영상 주소를 가져오지 못했습니다.");
+  }
+
+  const separator = (downloadLink as string).includes('?') ? '&' : '?';
+  const response = await fetch(`${downloadLink}${separator}key=${apiKey}`);
+  
+  if (!response.ok) {
+    throw new Error(`영상 다운로드 실패: ${response.status}`);
+  }
+  
+  const blob = await response.blob();
+  return URL.createObjectURL(blob);
+};
+
+export const generateNoddingVideo = async (base64Image: string, mimeType: string): Promise<string> => {
+  /**
+   * 사용자의 구체적인 물리적 동작 요청 반영:
+   * "양손 엄지를 번갈아가며 손목만 앞뒤로 카메라를 향해 까딱거리는 동작"
+   */
+  const prompt = `A video of the person from the source image looking directly at the camera. 
+The person is holding both hands in a thumbs-up gesture in front of their chest. 
+The person is rapidly tilting their wrists forward toward the camera and back in a rhythmic, alternating sequence. 
+As one hand's thumb tilts forward toward the lens, the other hand's thumb tilts back toward the body. 
+The motion is strictly isolated to the wrists tilting back and forth. 
+The person's facial expression, clothes, and the background remain exactly the same as in the original image. 
+Silent video. No audio.`;
+
+  // 시도할 모델 목록 (Fast 우선, 실패 시 Standard 시도)
+  const modelsToTry = ['veo-3.1-fast-generate-preview', 'veo-3.1-generate-preview'];
+  let lastError: any = null;
+
+  for (const modelName of modelsToTry) {
+    try {
+      console.log(`Attempting video generation with model: ${modelName}`);
+      return await performVideoGeneration(modelName, base64Image, mimeType, prompt);
+    } catch (error: any) {
+      lastError = error;
+      
+      // 429 에러(할당량 초과)인 경우에만 다음 모델로 시도
+      if (isQuotaExceededError(error)) {
+        console.warn(`${modelName} quota exceeded. Trying fallback model...`);
+        continue; 
+      }
+      
+      // 그 외의 에러(404, RAI 차단 등)는 즉시 중단
+      break;
+    }
+  }
+
+  // 모든 시도가 실패한 경우
+  console.error("All video generation attempts failed:", lastError);
+  if (isNotFoundError(lastError)) {
+     throw new Error("요청한 리소스를 찾을 수 없습니다. (Requested entity not found)");
+  }
+  if (isQuotaExceededError(lastError)) {
+    throw new Error("모든 영상 생성 모델의 할당량이 소진되었습니다. 나중에 다시 시도해 주세요.");
+  }
+  throw lastError || new Error("영상 생성에 실패했습니다.");
 };

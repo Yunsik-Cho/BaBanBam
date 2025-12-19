@@ -1,5 +1,5 @@
 {
-  "name": "바보이반 패션왕 분석기",
+  "name": "도전 패션왕",
   "description": "전신 사진을 올리면 AI가 냉철한 패션 평가를 내리고, 패션왕의 자질이 있다면 고개를 끄덕이는 영상을 생성합니다.",
   "requestFramePermissions": []
 }

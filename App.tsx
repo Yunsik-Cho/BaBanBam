@@ -3,8 +3,6 @@ import React, { useState, useRef, useEffect } from 'react';
 import html2canvas from 'html2canvas';
 import { analyzeFashion, generateNoddingVideo } from './services/geminiService';
 import { CritiqueResult, ImageFile, VideoGenerationState } from './types';
-import ApiKeySettings from './components/ApiKeySettings';
-import { hasStoredKey } from './utils/storage';
 
 const NAME_MAPPING: Record<string, number> = {
   '안치훈': 1, '김성민': 2, '김성휘': 3, '김태호': 4, '김태훈': 5,
@@ -15,8 +13,6 @@ const NAME_MAPPING: Record<string, number> = {
 const App: React.FC = () => {
   const [userName, setUserName] = useState<string>('');
   const [selectedImage, setSelectedImage] = useState<ImageFile | null>(null);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [hasApiKey, setHasApiKey] = useState(false);
   const [showSpicy, setShowSpicy] = useState(false);
 
   const [critiqueState, setCritiqueState] = useState<{
@@ -32,10 +28,6 @@ const App: React.FC = () => {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const critiquePanelRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    setHasApiKey(hasStoredKey());
-  }, []);
 
   const sortedNames = Object.keys(NAME_MAPPING).sort((a, b) => a.localeCompare(b, 'ko'));
 
@@ -104,16 +96,13 @@ const App: React.FC = () => {
             backgroundColor: '#111111',
             scale: 2,
             logging: false,
-            // 캡처 시 여백 최소화를 위해 너비 고정 대신 실제 렌더링된 너비 사용
             width: critiquePanelRef.current.offsetWidth,
             height: critiquePanelRef.current.offsetHeight
           });
           
-          // 동적으로 2:3 비율 맞추기 (너비 기준 여백 최소화)
           let finalW = canvas.width;
-          let finalH = canvas.width * 1.5; // 너비 기반 2:3 높이
+          let finalH = canvas.width * 1.5;
           
-          // 만약 실제 내용 높이가 계산된 높이보다 크다면 높이 기준으로 너비를 재조정
           if (canvas.height > finalH) {
             finalH = canvas.height;
             finalW = finalH * (2/3);
@@ -126,8 +115,6 @@ const App: React.FC = () => {
           if (fCtx) {
             fCtx.fillStyle = '#111111';
             fCtx.fillRect(0, 0, finalW, finalH);
-            
-            // 중앙 배치 (너비가 일치하면 x는 0이 됨)
             const x = (finalW - canvas.width) / 2;
             const y = (finalH - canvas.height) / 2;
             fCtx.drawImage(canvas, x, y);
@@ -159,17 +146,34 @@ const App: React.FC = () => {
     }
   };
 
+  const ensureApiKey = async () => {
+    // @ts-ignore
+    if (window.aistudio && !(await window.aistudio.hasSelectedApiKey())) {
+      // @ts-ignore
+      await window.aistudio.openSelectKey();
+    }
+  };
+
   const handleStartProcess = async () => {
-    if (!hasApiKey) { setIsSettingsOpen(true); return; }
+    await ensureApiKey();
     if (!selectedImage) return;
     setCritiqueState({ loading: true, data: null, error: null });
     setVideoState({ status: 'idle', url: null });
     analyzeFashion(selectedImage.base64Data, selectedImage.mimeType)
       .then(result => setCritiqueState({ loading: false, data: result, error: null }))
-      .catch(() => setCritiqueState({ loading: false, data: null, error: "분석 실패... 다시 시도해주세요." }));
+      .catch(async (err) => {
+        console.error("Process failed:", err);
+        if (err.message?.includes("Requested entity was not found")) {
+           // Reset key selection if project/key is invalid
+           // @ts-ignore
+           if (window.aistudio) await window.aistudio.openSelectKey();
+        }
+        setCritiqueState({ loading: false, data: null, error: err.message || "분석 실패" });
+      });
   };
 
   const handleGenerateVideo = async () => {
+    await ensureApiKey();
     if (!selectedImage) return;
     setVideoState({ status: 'generating', url: null });
     try {
@@ -178,6 +182,7 @@ const App: React.FC = () => {
 
       const videoUrl = await generateNoddingVideo(croppedBase64, 'image/jpeg');
       setVideoState({ status: 'completed', url: videoUrl });
+      
       const response = await fetch(videoUrl);
       const blob = await response.blob();
       const reader = new FileReader();
@@ -185,23 +190,17 @@ const App: React.FC = () => {
       reader.readAsDataURL(blob);
     } catch (error: any) {
       console.error("Video generation failed:", error);
-      if (error.message?.includes("Requested entity was not found") || error.message?.includes("404")) {
-        setVideoState({ status: 'error', url: null, error: "영상 모델(Veo) 접근 권한이 없습니다. 유료 API 키 설정을 확인해주세요." });
-        // @ts-ignore
-        if (window.aistudio && typeof window.aistudio.openSelectKey === 'function') {
-           // @ts-ignore
-           window.aistudio.openSelectKey();
-        }
-      } else {
-        setVideoState({ status: 'error', url: null, error: error.message || "영상 생성 실패" });
+      if (error.message?.includes("Requested entity was not found")) {
+         // Reset key selection if project/key is invalid
+         // @ts-ignore
+         if (window.aistudio) await window.aistudio.openSelectKey();
       }
+      setVideoState({ status: 'error', url: null, error: error.message || "영상 생성 실패" });
     }
   };
 
   return (
     <div className="min-h-screen bg-[#111111] text-gray-100 font-sans pb-20">
-      <ApiKeySettings isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} onKeyUpdate={(exists) => setHasApiKey(exists)} />
-
       {!userName && (
         <div className="fixed inset-0 z-50 bg-black flex items-center justify-center p-6">
           <div className="w-full max-w-lg bg-[#1a1a20] border border-gray-800 rounded-3xl p-8 shadow-2xl">
@@ -221,18 +220,12 @@ const App: React.FC = () => {
         </div>
       )}
 
-      <nav className="absolute top-0 right-0 p-6 z-20">
-        <button onClick={() => setIsSettingsOpen(true)} className="p-3 rounded-full border bg-gray-900 border-gray-800 text-gray-400 hover:text-[#FC6E22] hover:border-[#FC6E22] transition-all">
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-        </button>
-      </nav>
-
       <main className="container mx-auto max-w-5xl px-6 py-12 relative flex flex-col items-center">
         <header className="text-center mb-10 w-full">
           <div className="inline-block px-4 py-1 rounded-full bg-orange-500/10 text-[#FC6E22] text-xs font-bold mb-4 border border-[#FC6E22]/20 uppercase tracking-widest">
             Welcome, {userName}
           </div>
-          <h1 className="text-5xl md:text-7xl font-display font-bold text-white mb-4">바보이반 패션왕 분석기</h1>
+          <h1 className="text-5xl md:text-7xl font-display font-bold text-white mb-4">도전 패션왕</h1>
           <button onClick={() => setUserName('')} className="text-gray-600 hover:text-white text-xs underline transition-all">이름 다시 선택</button>
         </header>
 
@@ -251,21 +244,19 @@ const App: React.FC = () => {
               <div className="w-full flex flex-col items-center justify-center min-h-[500px] space-y-6">
                 <div className="w-16 h-16 border-4 border-white/10 border-t-[#FC6E22] rounded-full animate-spin"></div>
                 <div className="text-center space-y-2">
-                  <p className="text-xl font-bold text-white">심사위원들의 냉철한 토론이 진행 중입니다...</p>
-                  <p className="text-gray-500 font-medium italic">"이 색감... 정말 최선인가요?"</p>
+                  <p className="text-xl font-bold text-white">음.. 이럴꺼면..</p>
+                  <p className="text-gray-500 font-medium italic">"If I were you.."</p>
                 </div>
               </div>
             )}
 
             {critiqueState.data && (
               <div className="flex flex-col items-center gap-8 w-full max-w-3xl">
-                {/* 실제 분석 결과 (캡처 대상) - 여백 최소화를 위해 p-4 md:p-6 수준으로 조정 */}
                 <div 
                   ref={critiquePanelRef} 
                   className="w-full bg-[#111111] border border-gray-800/50 shadow-2xl overflow-hidden flex flex-col p-6 md:p-10 justify-center gap-6 min-h-[800px] h-auto"
                 >
                   <div className="flex-1 flex flex-col gap-8 animate-fadeIn">
-                    {/* 축소된 Total Score */}
                     <div className="bg-[#1a1a1e] rounded-3xl p-4 border border-gray-800 shadow-xl flex flex-col items-center justify-center w-fit mx-auto px-12">
                       <h2 className="text-gray-500 text-[10px] font-bold uppercase mb-1 tracking-widest">TOTAL SCORE</h2>
                       <div className="flex items-center gap-2">
@@ -274,7 +265,6 @@ const App: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* AI 분석 Section - 너비 가득 채우기 */}
                     <div className="bg-[#1a1a1e] rounded-3xl p-10 border border-gray-800/50 shadow-lg w-full">
                       <h3 className="text-[11px] font-bold text-[#FC6E22]/80 uppercase mb-5 tracking-widest border-b border-[#FC6E22]/20 pb-2">AI 분석</h3>
                       <p className="text-gray-100 leading-snug text-3xl md:text-4xl font-bold italic">
@@ -282,7 +272,6 @@ const App: React.FC = () => {
                       </p>
                     </div>
 
-                    {/* 바보이반식 분석 Section - 너비 가득 채우기 */}
                     <div className="bg-[#1a1a1e] rounded-3xl p-10 border border-red-900/20 relative overflow-hidden shadow-lg flex-1 flex flex-col min-h-[300px] w-full">
                       <h3 className="text-[11px] font-bold text-red-500/80 uppercase mb-5 tracking-widest border-b border-red-900/20 pb-2">바보이반식 분석</h3>
                       <div className="relative flex-1 flex items-center">
@@ -322,6 +311,13 @@ const App: React.FC = () => {
                     <div className="w-full bg-gray-900 rounded-2xl p-4 border border-gray-800 shadow-xl">
                        <video src={videoState.url} autoPlay loop playsInline controls className="w-full rounded-xl mb-4 aspect-[9/16] bg-black" />
                        <p className="text-center text-[#FC6E22] font-bold">✨ 패션왕 인정 영상이 생성되었습니다!</p>
+                    </div>
+                  )}
+
+                  {videoState.status === 'error' && (
+                    <div className="w-full bg-red-900/20 border border-red-500/50 rounded-xl p-4 text-center">
+                      <p className="text-red-400 font-bold">{videoState.error}</p>
+                      <button onClick={handleGenerateVideo} className="mt-2 text-sm underline hover:text-white">다시 시도</button>
                     </div>
                   )}
 
