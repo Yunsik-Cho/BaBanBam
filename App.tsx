@@ -34,6 +34,9 @@ const App: React.FC = () => {
 
   const sortedNames = Object.keys(NAME_MAPPING).sort((a, b) => a.localeCompare(b, 'ko'));
 
+  /**
+   * 이미지를 2:3 비율로 크롭
+   */
   const cropToAspect = async (base64: string, aspectW: number, aspectH: number): Promise<string> => {
     return new Promise((resolve, reject) => {
       const img = new Image();
@@ -70,68 +73,64 @@ const App: React.FC = () => {
     });
   };
 
+  /**
+   * 결과를 클라우드(Vercel Blob)에 자동 저장
+   */
   const saveToCloud = async (payload: { image?: string; video?: string; type: 'upper_body' | 'result' | 'video' }) => {
-    if (!userName || !NAME_MAPPING[userName.trim()]) return;
+    const trimmedName = userName.trim();
+    if (!trimmedName || !NAME_MAPPING[trimmedName]) return;
+    
     try {
       await fetch('/api/save-result', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...payload, userId: NAME_MAPPING[userName.trim()], type: payload.type })
+        body: JSON.stringify({ 
+          ...payload, 
+          userId: NAME_MAPPING[trimmedName], 
+          type: payload.type 
+        })
       });
-    } catch (e) { console.warn('Auto-save failed', e); }
+    } catch (e) { 
+      console.warn('Auto-save failed', e); 
+    }
   };
 
+  /**
+   * 분석 결과가 나오면 자동으로 캡처하여 저장 시퀀스 실행
+   */
   useEffect(() => {
     if (critiqueState.data && critiquePanelRef.current && selectedImage) {
       const captureAndSave = async () => {
         try {
           const originalSpicy = showSpicy;
-          setShowSpicy(true);
+          setShowSpicy(true); // 캡처를 위해 잠시 보이기
           await new Promise(resolve => setTimeout(resolve, 2000));
           
           if (!critiquePanelRef.current) return;
           
+          // 1. 상반신 크롭 이미지 저장
           const croppedBase64 = await cropToAspect(selectedImage.preview, 2, 3);
           await saveToCloud({ image: croppedBase64, type: 'upper_body' });
 
+          // 2. 전체 결과지 캡처
           const canvas = await html2canvas(critiquePanelRef.current, {
             useCORS: true,
             backgroundColor: '#111111',
             scale: 2,
             logging: false,
-            width: critiquePanelRef.current.offsetWidth,
-            height: critiquePanelRef.current.offsetHeight
           });
           
-          let finalW = canvas.width;
-          let finalH = canvas.width * 1.5;
-          
-          if (canvas.height > finalH) {
-            finalH = canvas.height;
-            finalW = finalH * (2/3);
-          }
-
-          const finalCanvas = document.createElement('canvas');
-          finalCanvas.width = finalW;
-          finalCanvas.height = finalH;
-          const fCtx = finalCanvas.getContext('2d');
-          if (fCtx) {
-            fCtx.fillStyle = '#111111';
-            fCtx.fillRect(0, 0, finalW, finalH);
-            const x = (finalW - canvas.width) / 2;
-            const y = (finalH - canvas.height) / 2;
-            fCtx.drawImage(canvas, x, y);
-          }
-          
-          const resultBase64 = finalCanvas.toDataURL('image/jpeg', 0.85);
+          const resultBase64 = canvas.toDataURL('image/jpeg', 0.85);
           await saveToCloud({ image: resultBase64, type: 'result' });
           
-          setShowSpicy(originalSpicy);
-        } catch (e) { console.error("Auto-save sequence failed", e); }
+          setShowSpicy(originalSpicy); // 원래 상태로 복구
+        } catch (e) { 
+          console.error("Auto-save sequence failed", e); 
+        }
       };
       captureAndSave();
     }
-  }, [critiqueState.data]);
+  }, [critiqueState.data, selectedImage, userName]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -149,9 +148,13 @@ const App: React.FC = () => {
     }
   };
 
+  /**
+   * API Key 존재 여부를 견고하게 확인합니다.
+   */
   const ensureApiKey = async () => {
-    // 환경 변수에 이미 API_KEY가 있으면 팝업을 띄우지 않음
-    if (process.env.API_KEY && process.env.API_KEY !== "undefined") {
+    const envKey = process.env.API_KEY;
+    // Vite define에 의해 "undefined" 문자열이 들어올 수 있음을 방지
+    if (envKey && envKey !== "undefined" && envKey !== "") {
       return;
     }
 
@@ -162,7 +165,10 @@ const App: React.FC = () => {
         // @ts-ignore
         await window.aistudio.openSelectKey();
       }
+      return;
     }
+
+    throw new Error("API Key가 설정되지 않았습니다. Vercel 환경 변수 설정을 완료해주세요.");
   };
 
   const handleStartProcess = async () => {
@@ -177,10 +183,6 @@ const App: React.FC = () => {
       setCritiqueState({ loading: false, data: result, error: null });
     } catch (err: any) {
       console.error("Process failed:", err);
-      if (err.message?.includes("Requested entity was not found")) {
-         // @ts-ignore
-         if (window.aistudio) await window.aistudio.openSelectKey();
-      }
       setCritiqueState({ loading: false, data: null, error: err.message || "분석 실패" });
     }
   };
@@ -200,14 +202,14 @@ const App: React.FC = () => {
       const response = await fetch(videoUrl);
       const blob = await response.blob();
       const reader = new FileReader();
-      reader.onloadend = () => saveToCloud({ video: reader.result as string, type: 'video' });
+      reader.onloadend = () => {
+        if (reader.result) {
+          saveToCloud({ video: reader.result as string, type: 'video' });
+        }
+      };
       reader.readAsDataURL(blob);
     } catch (error: any) {
       console.error("Video generation failed:", error);
-      if (error.message?.includes("Requested entity was not found")) {
-         // @ts-ignore
-         if (window.aistudio) await window.aistudio.openSelectKey();
-      }
       setVideoState({ status: 'error', url: null, error: error.message || "영상 생성 실패" });
     }
   };
@@ -276,7 +278,7 @@ const App: React.FC = () => {
                   ref={critiquePanelRef} 
                   className="w-full bg-[#111111] border border-gray-800/50 shadow-2xl overflow-hidden flex flex-col p-6 md:p-10 justify-center gap-6 min-h-[800px] h-auto"
                 >
-                  <div className="flex-1 flex flex-col gap-8 animate-fadeIn">
+                  <div className="flex-1 flex flex-col gap-8">
                     <div className="bg-[#1a1a1e] rounded-3xl p-4 border border-gray-800 shadow-xl flex flex-col items-center justify-center w-fit mx-auto px-12">
                       <h2 className="text-gray-500 text-[10px] font-bold uppercase mb-1 tracking-widest">TOTAL SCORE</h2>
                       <div className="flex items-center gap-2">

@@ -9,14 +9,6 @@ declare var process: {
 import { GoogleGenAI, Type } from "@google/genai";
 import { CritiqueResult } from "../types";
 
-const getApiKey = () => {
-  const key = process.env.API_KEY;
-  if (!key || key === "undefined") {
-    return "";
-  }
-  return key;
-};
-
 // Helper to check for specific API error regarding key/project selection
 const isNotFoundError = (error: any) => {
   const msg = error?.message || (typeof error === 'string' ? error : "");
@@ -29,10 +21,14 @@ const isQuotaExceededError = (error: any) => {
   return msg.includes("quota") || msg.includes("exhausted") || msg.includes("429");
 };
 
+/**
+ * 전신 사진 패션 분석
+ */
 export const analyzeFashion = async (base64Image: string, mimeType: string): Promise<CritiqueResult> => {
-  const apiKey = getApiKey();
-  if (!apiKey) {
-    throw new Error("API Key가 설정되지 않았습니다. Vercel 환경 변수나 AI Studio 설정을 확인해주세요.");
+  // 가이드라인 준수: process.env.API_KEY를 직접 사용
+  const apiKey = process.env.API_KEY;
+  if (!apiKey || apiKey === "undefined") {
+    throw new Error("API Key가 설정되지 않았습니다. Vercel 설정을 확인해주세요.");
   }
 
   const ai = new GoogleGenAI({ apiKey });
@@ -92,17 +88,21 @@ export const analyzeFashion = async (base64Image: string, mimeType: string): Pro
   } catch (error: any) {
     console.error("Fashion analysis failed", error);
     if (isNotFoundError(error)) {
-       throw new Error("API 키 혹은 프로젝트가 올바르지 않습니다. (Requested entity not found)");
+       throw new Error("API 키 혹은 프로젝트가 올바르지 않습니다.");
     }
     throw error;
   }
 };
 
+/**
+ * 비디오 생성 공통 로직
+ */
 const performVideoGeneration = async (modelName: string, base64Image: string, mimeType: string, prompt: string): Promise<string> => {
-  const apiKey = getApiKey();
-  if (!apiKey) {
+  const apiKey = process.env.API_KEY;
+  if (!apiKey || apiKey === "undefined") {
     throw new Error("API Key가 설정되지 않았습니다.");
   }
+  
   const ai = new GoogleGenAI({ apiKey });
 
   let operation = await ai.models.generateVideos({
@@ -121,9 +121,8 @@ const performVideoGeneration = async (modelName: string, base64Image: string, mi
 
   while (!operation.done) {
     await new Promise(resolve => setTimeout(resolve, 10000));
-    const currentApiKey = getApiKey();
-    const aiPoll = new GoogleGenAI({ apiKey: currentApiKey });
-    operation = await aiPoll.operations.getVideosOperation({ operation: operation as any });
+    // 매 폴링 시점에도 최신 인스턴스를 사용하거나 기존 인스턴스를 유지합니다.
+    operation = await ai.operations.getVideosOperation({ operation: operation as any });
     
     const opAny = operation as any;
     if (opAny.error) {
@@ -134,27 +133,24 @@ const performVideoGeneration = async (modelName: string, base64Image: string, mi
   const responseData = (operation as any).response;
   
   if (responseData?.raiMediaFilteredCount > 0) {
-    const reason = responseData.raiMediaFilteredReasons?.[0] || "입력 데이터나 프롬프트가 안전 정책에 의해 차단되었습니다.";
-    throw new Error(`안전 정책에 의해 차단됨: ${reason}`);
+    throw new Error("안전 정책에 의해 차단되었습니다.");
   }
 
   const downloadLink = responseData?.generatedVideos?.[0]?.video?.uri;
-
-  if (!downloadLink) {
-    throw new Error("영상 주소를 가져오지 못했습니다.");
-  }
+  if (!downloadLink) throw new Error("영상 주소를 가져오지 못했습니다.");
 
   const separator = (downloadLink as string).includes('?') ? '&' : '?';
   const response = await fetch(`${downloadLink}${separator}key=${apiKey}`);
   
-  if (!response.ok) {
-    throw new Error(`영상 다운로드 실패: ${response.status}`);
-  }
+  if (!response.ok) throw new Error(`영상 다운로드 실패: ${response.status}`);
   
   const blob = await response.blob();
   return URL.createObjectURL(blob);
 };
 
+/**
+ * 고개 끄덕이는 패션왕 영상 생성
+ */
 export const generateNoddingVideo = async (base64Image: string, mimeType: string): Promise<string> => {
   const prompt = `A video of the person from the source image looking directly at the camera. 
 The person is holding both hands in a thumbs-up gesture in front of their chest. 
@@ -172,19 +168,10 @@ Silent video. No audio.`;
       return await performVideoGeneration(modelName, base64Image, mimeType, prompt);
     } catch (error: any) {
       lastError = error;
-      if (isQuotaExceededError(error)) {
-        console.warn(`${modelName} quota exceeded. Trying fallback model...`);
-        continue; 
-      }
+      if (isQuotaExceededError(error)) continue; 
       break;
     }
   }
 
-  if (isNotFoundError(lastError)) {
-     throw new Error("요청한 리소스를 찾을 수 없습니다. API 키 설정을 확인해주세요.");
-  }
-  if (isQuotaExceededError(lastError)) {
-    throw new Error("모든 영상 생성 모델의 할당량이 소진되었습니다. 나중에 다시 시도해 주세요.");
-  }
   throw lastError || new Error("영상 생성에 실패했습니다.");
 };
