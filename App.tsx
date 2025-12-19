@@ -4,6 +4,9 @@ import html2canvas from 'html2canvas';
 import { analyzeFashion, generateNoddingVideo } from './services/geminiService';
 import { CritiqueResult, ImageFile, VideoGenerationState } from './types';
 
+// process.env.API_KEY 접근을 위한 선언
+declare var process: { env: { API_KEY: string } };
+
 const NAME_MAPPING: Record<string, number> = {
   '안치훈': 1, '김성민': 2, '김성휘': 3, '김태호': 4, '김태훈': 5,
   '박영민': 6, '박준형': 7, '변정욱': 8, '송현섭': 9, '신준휘': 10,
@@ -147,36 +150,47 @@ const App: React.FC = () => {
   };
 
   const ensureApiKey = async () => {
+    // 환경 변수에 이미 API_KEY가 있으면 팝업을 띄우지 않음
+    if (process.env.API_KEY && process.env.API_KEY !== "undefined") {
+      return;
+    }
+
     // @ts-ignore
-    if (window.aistudio && !(await window.aistudio.hasSelectedApiKey())) {
+    if (window.aistudio) {
       // @ts-ignore
-      await window.aistudio.openSelectKey();
+      if (!(await window.aistudio.hasSelectedApiKey())) {
+        // @ts-ignore
+        await window.aistudio.openSelectKey();
+      }
     }
   };
 
   const handleStartProcess = async () => {
-    await ensureApiKey();
     if (!selectedImage) return;
+    
     setCritiqueState({ loading: true, data: null, error: null });
     setVideoState({ status: 'idle', url: null });
-    analyzeFashion(selectedImage.base64Data, selectedImage.mimeType)
-      .then(result => setCritiqueState({ loading: false, data: result, error: null }))
-      .catch(async (err) => {
-        console.error("Process failed:", err);
-        if (err.message?.includes("Requested entity was not found")) {
-           // Reset key selection if project/key is invalid
-           // @ts-ignore
-           if (window.aistudio) await window.aistudio.openSelectKey();
-        }
-        setCritiqueState({ loading: false, data: null, error: err.message || "분석 실패" });
-      });
+
+    try {
+      await ensureApiKey();
+      const result = await analyzeFashion(selectedImage.base64Data, selectedImage.mimeType);
+      setCritiqueState({ loading: false, data: result, error: null });
+    } catch (err: any) {
+      console.error("Process failed:", err);
+      if (err.message?.includes("Requested entity was not found")) {
+         // @ts-ignore
+         if (window.aistudio) await window.aistudio.openSelectKey();
+      }
+      setCritiqueState({ loading: false, data: null, error: err.message || "분석 실패" });
+    }
   };
 
   const handleGenerateVideo = async () => {
-    await ensureApiKey();
     if (!selectedImage) return;
+    
     setVideoState({ status: 'generating', url: null });
     try {
+      await ensureApiKey();
       const croppedBase64WithHeader = await cropToAspect(selectedImage.preview, 2, 3);
       const croppedBase64 = croppedBase64WithHeader.split(',')[1];
 
@@ -191,7 +205,6 @@ const App: React.FC = () => {
     } catch (error: any) {
       console.error("Video generation failed:", error);
       if (error.message?.includes("Requested entity was not found")) {
-         // Reset key selection if project/key is invalid
          // @ts-ignore
          if (window.aistudio) await window.aistudio.openSelectKey();
       }
@@ -247,6 +260,13 @@ const App: React.FC = () => {
                   <p className="text-xl font-bold text-white">음.. 이럴꺼면..</p>
                   <p className="text-gray-500 font-medium italic">"If I were you.."</p>
                 </div>
+              </div>
+            )}
+
+            {critiqueState.error && (
+              <div className="w-full max-w-md bg-red-900/20 border border-red-500/50 rounded-2xl p-6 text-center">
+                <p className="text-red-400 font-bold mb-4">{critiqueState.error}</p>
+                <button onClick={() => setCritiqueState({loading: false, data: null, error: null})} className="text-white bg-red-500/40 px-6 py-2 rounded-full hover:bg-red-500/60 transition-all">다시 시도</button>
               </div>
             )}
 
