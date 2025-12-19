@@ -4,7 +4,7 @@ import html2canvas from 'html2canvas';
 import { analyzeFashion, generateNoddingVideo } from './services/geminiService';
 import { CritiqueResult, ImageFile, VideoGenerationState } from './types';
 
-// process.env.API_KEY 접근을 위한 선언
+// process.env.API_KEY 접근을 위한 선언, test
 declare var process: { env: { API_KEY: string } };
 
 const NAME_MAPPING: Record<string, number> = {
