@@ -1,4 +1,11 @@
 
+declare var process: {
+  env: {
+    API_KEY: string;
+    [key: string]: string | undefined;
+  };
+};
+
 import { GoogleGenAI, Type } from "@google/genai";
 import { CritiqueResult } from "../types";
 
