@@ -3,6 +3,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import html2canvas from 'html2canvas';
 import { analyzeFashion } from './services/geminiService';
 import { CritiqueResult, ImageFile } from './types';
+import UserImagesDisplay from './UserImagesDisplay'; // New import
 
 // process.env.API_KEY 접근을 위한 선언
 declare var process: { env: { API_KEY: string } };
@@ -33,6 +34,11 @@ const App: React.FC = () => {
     error: string | null;
   }>({ loading: false, data: null, error: null });
 
+  // Routing states
+  const [currentView, setCurrentView] = useState<'main' | 'userImages'>('main');
+  const [selectedUserForImages, setSelectedUserForImages] = useState<{ userId: string; userName: string } | null>(null);
+
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const critiquePanelRef = useRef<HTMLDivElement>(null);
 
@@ -58,10 +64,10 @@ const App: React.FC = () => {
   };
 
   useEffect(() => {
-    if (userName) {
+    if (userName && currentView === 'main') { // Only fetch rankings when on main view and user is selected
       fetchRankings();
     }
-  }, [userName]);
+  }, [userName, currentView]); // Rerun when userName or view changes
 
   /**
    * 이미지를 2:3 비율로 크롭
@@ -243,150 +249,169 @@ const App: React.FC = () => {
         </div>
       )}
 
-      <main className="container mx-auto max-w-5xl px-6 py-12 relative flex flex-col items-center">
-        <header className="text-center mb-10 w-full">
-          <div className="inline-block px-4 py-1 rounded-full bg-orange-500/10 text-[#FC6E22] text-xs font-bold mb-4 border border-[#FC6E22]/20 uppercase tracking-widest">
-            Welcome, {userName}
-          </div>
-          <h1 className="text-5xl md:text-7xl font-display font-bold text-white mb-4">도전 패션왕</h1>
-          <button onClick={() => setUserName('')} className="text-gray-600 hover:text-white text-xs underline transition-all">이름 다시 선택</button>
-        </header>
-
-        {/* 랭킹 보드 UI */}
-        {userName && (
-          <section className="w-full max-w-2xl mb-12 bg-[#1a1a20] border border-gray-800 rounded-3xl overflow-hidden shadow-2xl">
-            <div className="px-6 py-4 border-b border-gray-800 flex justify-between items-center bg-gray-900/50">
-              <h2 className="text-lg font-display text-white tracking-tight">🏆 FASHION LEADERBOARD</h2>
-              <button 
-                onClick={fetchRankings}
-                className="text-[10px] text-[#FC6E22] font-bold uppercase tracking-widest hover:underline"
-              >
-                {isRankingLoading ? '갱신 중...' : '새로고침'}
-              </button>
+      {userName && (
+        <main className="container mx-auto max-w-5xl px-6 py-12 relative flex flex-col items-center">
+          <header className="text-center mb-10 w-full">
+            <div className="inline-block px-4 py-1 rounded-full bg-orange-500/10 text-[#FC6E22] text-xs font-bold mb-4 border border-[#FC6E22]/20 uppercase tracking-widest">
+              Welcome, {userName}
             </div>
-            <div className="p-6">
-              {isRankingLoading && rankings.length === 0 ? (
-                <div className="flex flex-col items-center py-8 space-y-3">
-                  <div className="w-8 h-8 border-2 border-[#FC6E22]/20 border-t-[#FC6E22] rounded-full animate-spin"></div>
-                  <p className="text-sm text-gray-500">순위를 불러오는 중입니다...</p>
-                </div>
-              ) : rankings.length > 0 ? (
-                <div className="space-y-3">
-                  {rankings.slice(0, 5).map((rank, index) => (
-                    <div key={rank.userId} className={`flex items-center justify-between p-4 rounded-2xl transition-all ${rank.userName === userName ? 'bg-[#FC6E22]/20 border border-[#FC6E22]/40 scale-[1.02]' : 'bg-black/40 border border-gray-800/50'}`}>
-                      <div className="flex items-center gap-5">
-                        <span className={`w-10 h-10 flex items-center justify-center rounded-xl text-lg font-display ${index === 0 ? 'bg-yellow-500 text-black' : index === 1 ? 'bg-gray-300 text-black' : index === 2 ? 'bg-orange-700 text-white' : 'bg-gray-800 text-gray-500'}`}>
-                          {index + 1}
-                        </span>
-                        <div>
-                          <p className={`font-bold text-lg ${rank.userName === userName ? 'text-[#FC6E22]' : 'text-gray-200'}`}>{rank.userName}</p>
-                          <p className="text-[10px] text-gray-600 font-medium">{new Date(rank.updatedAt).toLocaleDateString()}</p>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <span className="text-3xl font-display text-white leading-none">{rank.score}</span>
-                        <span className="ml-1 text-[10px] text-gray-600 font-bold uppercase tracking-tighter">points</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-10">
-                  <p className="text-gray-500 text-lg mb-2">아직 기록된 점수가 없습니다.</p>
-                  <p className="text-[#FC6E22]/60 text-sm font-bold animate-pulse">지금 바로 첫 번째 패션왕에 도전해보세요! 🚀</p>
-                </div>
-              )}
-            </div>
-          </section>
-        )}
+            <h1 className="text-5xl md:text-7xl font-display font-bold text-white mb-4">도전 패션왕</h1>
+            <button onClick={() => setUserName('')} className="text-gray-600 hover:text-white text-xs underline transition-all">이름 다시 선택</button>
+          </header>
 
-        {selectedImage && (
-          <div className="w-full flex flex-col items-center gap-10">
-            {!critiqueState.data && !critiqueState.loading && (
-              <div className="w-full max-w-md relative rounded-3xl overflow-hidden bg-black shadow-2xl ring-1 ring-white/10 aspect-[2/3]">
-                <img src={selectedImage.preview} alt="Upload" className="w-full h-full object-cover" />
-                <div className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-[2px]">
-                  <button onClick={handleStartProcess} className="bg-white text-black text-xl font-bold py-4 px-10 rounded-full shadow-2xl hover:scale-105 transition-transform">측정하기</button>
-                </div>
-              </div>
-            )}
-
-            {critiqueState.loading && (
-              <div className="w-full flex flex-col items-center justify-center min-h-[500px] space-y-6 text-center">
-                <div className="w-16 h-16 border-4 border-white/10 border-t-[#FC6E22] rounded-full animate-spin"></div>
-                <div className="space-y-2">
-                  <p className="text-xl font-bold text-white">음.. 이럴꺼면..</p>
-                  <p className="text-gray-500 font-medium italic">"If I were you.."</p>
-                </div>
-              </div>
-            )}
-
-            {critiqueState.error && (
-              <div className="w-full max-w-md bg-red-900/20 border border-red-500/50 rounded-2xl p-6 text-center">
-                <p className="text-red-400 font-bold mb-4">{critiqueState.error}</p>
-                <button onClick={() => setCritiqueState({loading: false, data: null, error: null})} className="text-white bg-red-500/40 px-6 py-2 rounded-full hover:bg-red-500/60 transition-all">다시 시도</button>
-              </div>
-            )}
-
-            {critiqueState.data && (
-              <div className="flex flex-col items-center gap-8 w-full max-w-3xl">
-                <div 
-                  ref={critiquePanelRef} 
-                  className="w-full bg-[#111111] border border-gray-800/50 shadow-2xl overflow-hidden flex flex-col p-6 md:p-10 justify-center gap-6 min-h-[800px] h-auto"
-                >
-                  <div className="flex-1 flex flex-col gap-8">
-                    <div className="bg-[#1a1a1e] rounded-3xl p-4 border border-gray-800 shadow-xl flex flex-col items-center justify-center w-fit mx-auto px-12">
-                      <h2 className="text-gray-500 text-[10px] font-bold uppercase mb-1 tracking-widest">TOTAL SCORE</h2>
-                      <div className="flex items-center gap-2">
-                        <span className="text-5xl font-display font-bold text-[#FC6E22] leading-none">{critiqueState.data.totalScore}</span>
-                        <span className="text-base text-gray-700 font-bold pt-2">/ 100</span>
-                      </div>
-                    </div>
-
-                    <div className="bg-[#1a1a1e] rounded-3xl p-10 border border-gray-800/50 shadow-lg w-full">
-                      <h3 className="text-[11px] font-bold text-[#FC6E22]/80 uppercase mb-5 tracking-widest border-b border-[#FC6E22]/20 pb-2">AI 분석</h3>
-                      <p className="text-gray-100 leading-snug text-3xl md:text-4xl font-bold italic">
-                        "{critiqueState.data.gentleCritique}"
-                      </p>
-                    </div>
-
-                    <div className="bg-[#1a1a1e] rounded-3xl p-10 border border-red-900/20 relative overflow-hidden shadow-lg flex-1 flex flex-col min-h-[300px] w-full">
-                      <h3 className="text-[11px] font-bold text-red-500/80 uppercase mb-5 tracking-widest border-b border-red-900/20 pb-2">바보이반식 분석</h3>
-                      <div className="relative flex-1 flex items-center">
-                        <p className={`text-gray-200 leading-relaxed text-2xl md:text-3xl font-bold transition-all duration-700 ${showSpicy ? '' : 'blur-3xl opacity-5 select-none'}`}>
-                          {critiqueState.data.sincereCritique}
-                        </p>
-                        {!showSpicy && (
-                          <div className="absolute inset-0 flex items-center justify-center" data-html2canvas-ignore>
-                            <button onClick={() => setShowSpicy(true)} className="bg-red-500/10 text-red-400 font-bold py-4 px-10 rounded-full border border-red-500/40 hover:bg-red-500/20 transition-all font-fun text-2xl shadow-2xl">
-                              후기 보기 (매운맛)
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="w-full flex flex-col gap-4" data-html2canvas-ignore>
-                  <button onClick={() => { setSelectedImage(null); setCritiqueState({loading: false, data: null, error: null}); }} className="w-full py-4 text-gray-500 border border-gray-800 rounded-xl hover:bg-gray-800 hover:text-white text-base font-medium transition-all">
-                    새로운 사진으로 다시하기
+          {currentView === 'main' && (
+            <>
+              {/* 랭킹 보드 UI */}
+              <section className="w-full max-w-2xl mb-12 bg-[#1a1a20] border border-gray-800 rounded-3xl overflow-hidden shadow-2xl">
+                <div className="px-6 py-4 border-b border-gray-800 flex justify-between items-center bg-gray-900/50">
+                  <h2 className="text-lg font-display text-white tracking-tight">🏆 FASHION LEADERBOARD</h2>
+                  <button 
+                    onClick={fetchRankings}
+                    className="text-[10px] text-[#FC6E22] font-bold uppercase tracking-widest hover:underline"
+                  >
+                    {isRankingLoading ? '갱신 중...' : '새로고침'}
                   </button>
                 </div>
-              </div>
-            )}
-          </div>
-        )}
+                <div className="p-6">
+                  {isRankingLoading && rankings.length === 0 ? (
+                    <div className="flex flex-col items-center py-8 space-y-3">
+                      <div className="w-8 h-8 border-2 border-[#FC6E22]/20 border-t-[#FC6E22] rounded-full animate-spin"></div>
+                      <p className="text-sm text-gray-500">순위를 불러오는 중입니다...</p>
+                    </div>
+                  ) : rankings.length > 0 ? (
+                    <div className="space-y-3">
+                      {rankings.slice(0, 5).map((rank, index) => (
+                        <div 
+                          key={rank.userId} 
+                          onClick={() => { // Add onClick handler
+                            setSelectedUserForImages({ userId: rank.userId, userName: rank.userName });
+                            setCurrentView('userImages');
+                          }}
+                          className={`flex items-center justify-between p-4 rounded-2xl transition-all cursor-pointer ${rank.userName === userName ? 'bg-[#FC6E22]/20 border border-[#FC6E22]/40 scale-[1.02]' : 'bg-black/40 border border-gray-800/50 hover:bg-black/60'}`}
+                        >
+                          <div className="flex items-center gap-5">
+                            <span className={`w-10 h-10 flex items-center justify-center rounded-xl text-lg font-display ${index === 0 ? 'bg-yellow-500 text-black' : index === 1 ? 'bg-gray-300 text-black' : index === 2 ? 'bg-orange-700 text-white' : 'bg-gray-800 text-gray-500'}`}>
+                              {index + 1}
+                            </span>
+                            <div>
+                              <p className={`font-bold text-lg ${rank.userName === userName ? 'text-[#FC6E22]' : 'text-gray-200'}`}>{rank.userName}</p>
+                              <p className="text-[10px] text-gray-600 font-medium">{new Date(rank.updatedAt).toLocaleDateString()}</p>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-3xl font-display text-white leading-none">{rank.score}</span>
+                            <span className="ml-1 text-[10px] text-gray-600 font-bold uppercase tracking-tighter">points</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-10">
+                      <p className="text-gray-500 text-lg mb-2">아직 기록된 점수가 없습니다.</p>
+                      <p className="text-[#FC6E22]/60 text-sm font-bold animate-pulse">지금 바로 첫 번째 패션왕에 도전해보세요! 🚀</p>
+                    </div>
+                  )}
+                </div>
+              </section>
 
-        {!selectedImage && !critiqueState.loading && (
-          <div onClick={() => fileInputRef.current?.click()} className="w-full max-w-lg border-2 border-dashed border-gray-700 hover:border-[#FC6E22]/50 hover:bg-[#1a1a1a] rounded-2xl h-[450px] flex flex-col items-center justify-center cursor-pointer bg-[#161616] transition-all shadow-xl group">
-            <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/*" className="hidden" />
-            <div className="text-7xl mb-6 text-gray-600 group-hover:scale-110 transition-transform">📸</div>
-            <p className="text-3xl font-display text-gray-300">전신 사진 업로드</p>
-            <p className="text-gray-500 mt-2 font-medium">심사위원들이 당신의 착장을 기다리고 있습니다</p>
-          </div>
-        )}
-      </main>
+              {selectedImage && (
+                <div className="w-full flex flex-col items-center gap-10">
+                  {!critiqueState.data && !critiqueState.loading && (
+                    <div className="w-full max-w-md relative rounded-3xl overflow-hidden bg-black shadow-2xl ring-1 ring-white/10 aspect-[2/3]">
+                      <img src={selectedImage.preview} alt="Upload" className="w-full h-full object-cover" />
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-[2px]">
+                        <button onClick={handleStartProcess} className="bg-white text-black text-xl font-bold py-4 px-10 rounded-full shadow-2xl hover:scale-105 transition-transform">측정하기</button>
+                      </div>
+                    </div>
+                  )}
+
+                  {critiqueState.loading && (
+                    <div className="w-full flex flex-col items-center justify-center min-h-[500px] space-y-6 text-center">
+                      <div className="w-16 h-16 border-4 border-white/10 border-t-[#FC6E22] rounded-full animate-spin"></div>
+                      <div className="space-y-2">
+                        <p className="text-xl font-bold text-white">음.. 이럴꺼면..</p>
+                        <p className="text-gray-500 font-medium italic">"If I were you.."</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {critiqueState.error && (
+                    <div className="w-full max-w-md bg-red-900/20 border border-red-500/50 rounded-2xl p-6 text-center">
+                      <p className="text-red-400 font-bold mb-4">{critiqueState.error}</p>
+                      <button onClick={() => setCritiqueState({loading: false, data: null, error: null})} className="text-white bg-red-500/40 px-6 py-2 rounded-full hover:bg-red-500/60 transition-all">다시 시도</button>
+                    </div>
+                  )}
+
+                  {critiqueState.data && (
+                    <div className="flex flex-col items-center gap-8 w-full max-w-3xl">
+                      <div 
+                        ref={critiquePanelRef} 
+                        className="w-full bg-[#111111] border border-gray-800/50 shadow-2xl overflow-hidden flex flex-col p-6 md:p-10 justify-center gap-6 min-h-[800px] h-auto"
+                      >
+                        <div className="flex-1 flex flex-col gap-8">
+                          <div className="bg-[#1a1a1e] rounded-3xl p-4 border border-gray-800 shadow-xl flex flex-col items-center justify-center w-fit mx-auto px-12">
+                            <h2 className="text-gray-500 text-[10px] font-bold uppercase mb-1 tracking-widest">TOTAL SCORE</h2>
+                            <div className="flex items-center gap-2">
+                              <span className="text-5xl font-display font-bold text-[#FC6E22] leading-none">{critiqueState.data.totalScore}</span>
+                              <span className="text-base text-gray-700 font-bold pt-2">/ 100</span>
+                            </div>
+                          </div>
+
+                          <div className="bg-[#1a1a1e] rounded-3xl p-10 border border-gray-800/50 shadow-lg w-full">
+                            <h3 className="text-[11px] font-bold text-[#FC6E22]/80 uppercase mb-5 tracking-widest border-b border-[#FC6E22]/20 pb-2">AI 분석</h3>
+                            <p className="text-gray-100 leading-snug text-3xl md:text-4xl font-bold italic">
+                              "{critiqueState.data.gentleCritique}"
+                            </p>
+                          </div>
+
+                          <div className="bg-[#1a1a1e] rounded-3xl p-10 border border-red-900/20 relative overflow-hidden shadow-lg flex-1 flex flex-col min-h-[300px] w-full">
+                            <h3 className="text-[11px] font-bold text-red-500/80 uppercase mb-5 tracking-widest border-b border-red-900/20 pb-2">바보이반식 분석</h3>
+                            <div className="relative flex-1 flex items-center">
+                              <p className={`text-gray-200 leading-relaxed text-2xl md:text-3xl font-bold transition-all duration-700 ${showSpicy ? '' : 'blur-3xl opacity-5 select-none'}`}>
+                                {critiqueState.data.sincereCritique}
+                              </p>
+                              {!showSpicy && (
+                                <div className="absolute inset-0 flex items-center justify-center" data-html2canvas-ignore>
+                                  <button onClick={() => setShowSpicy(true)} className="bg-red-500/10 text-red-400 font-bold py-4 px-10 rounded-full border border-red-500/40 hover:bg-red-500/20 transition-all font-fun text-2xl shadow-2xl">
+                                    후기 보기 (매운맛)
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="w-full flex flex-col gap-4" data-html2canvas-ignore>
+                        <button onClick={() => { setSelectedImage(null); setCritiqueState({loading: false, data: null, error: null}); }} className="w-full py-4 text-gray-500 border border-gray-800 rounded-xl hover:bg-gray-800 hover:text-white text-base font-medium transition-all">
+                          새로운 사진으로 다시하기
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {!selectedImage && !critiqueState.loading && (
+                <div onClick={() => fileInputRef.current?.click()} className="w-full max-w-lg border-2 border-dashed border-gray-700 hover:border-[#FC6E22]/50 hover:bg-[#1a1a1a] rounded-2xl h-[450px] flex flex-col items-center justify-center cursor-pointer bg-[#161616] transition-all shadow-xl group">
+                  <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/*" className="hidden" />
+                  <div className="text-7xl mb-6 text-gray-600 group-hover:scale-110 transition-transform">📸</div>
+                  <p className="text-3xl font-display text-gray-300">전신 사진 업로드</p>
+                  <p className="text-gray-500 mt-2 font-medium">심사위원들이 당신의 착장을 기다리고 있습니다</p>
+                </div>
+              )}
+            </>
+          )}
+
+          {currentView === 'userImages' && selectedUserForImages && (
+            <UserImagesDisplay 
+              userId={selectedUserForImages.userId} 
+              userName={selectedUserForImages.userName} 
+              onBack={() => setCurrentView('main')} 
+            />
+          )}
+        </main>
+      )}
     </div>
   );
 };

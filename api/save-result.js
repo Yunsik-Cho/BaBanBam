@@ -1,5 +1,5 @@
 
-import { put, list } from '@vercel/blob';
+import { put } from '@vercel/blob';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -40,27 +40,26 @@ export default async function handler(req, res) {
       const base64Data = image.split(';base64,').pop();
       buffer = Buffer.from(base64Data, 'base64');
       
-      const baseName = type === 'upper_body' ? 'upper_image.jpg' : 'fashion_image.jpg';
-      const targetPath = `fashion-king/${userId}/${baseName}`;
-      
-      const { blobs } = await list({ prefix: targetPath });
-      const alreadyExists = blobs.some(b => b.pathname === targetPath);
-      
-      let finalName = baseName;
-      if (alreadyExists) {
-        const nameParts = baseName.split('.');
-        const ext = nameParts.pop();
-        finalName = `${nameParts.join('.')}_v2.${ext}`;
+      let baseName;
+      if (type === 'upper_body') {
+        baseName = 'upper_image.jpg';
+      } else if (type === 'result') {
+        baseName = 'fashion_image.jpg';
+      } else {
+        return res.status(400).json({ error: 'Invalid image type for saving.' });
       }
 
-      filename = `fashion-king/${userId}/${finalName}`;
+      filename = `fashion-king/${userId}/${baseName}`;
       contentType = 'image/jpeg';
+    } else if (video) {
+        // 비디오 저장 로직은 현재 요청 범위에 포함되지 않음
+        return res.status(400).json({ error: 'Video saving not implemented in this context.' });
     }
 
     const blob = await put(filename, buffer, { 
       access: 'public',
       contentType: contentType,
-      addRandomSuffix: false 
+      addRandomSuffix: false // 파일 이름이 같으면 덮어쓰기
     });
 
     return res.status(200).json({ success: true, url: blob.url });
