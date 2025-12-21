@@ -19,8 +19,9 @@ const UserImagesDisplay: React.FC<UserImagesDisplayProps> = ({ userId, userName,
       setError(null);
       try {
         const [fashionRes, upperRes] = await Promise.all([
-          fetch(`/api/get-image?userId=${userId}&imageType=result&t=${Date.now()}`),
-          fetch(`/api/get-image?userId=${userId}&imageType=upper_body&t=${Date.now()}`),
+          // Explicitly request _v2 versions
+          fetch(`/api/get-image?userId=${userId}&imageType=result_v2&t=${Date.now()}`),
+          fetch(`/api/get-image?userId=${userId}&imageType=upper_body_v2&t=${Date.now()}`),
         ]);
 
         const fashionData = await fashionRes.json();
@@ -30,14 +31,14 @@ const UserImagesDisplay: React.FC<UserImagesDisplayProps> = ({ userId, userName,
           setFashionImageUrl(fashionData.url);
         } else {
           setFashionImageUrl(null); // Explicitly set to null if not found
-          console.warn(`No fashion image found for ${userName}: ${fashionData.error}`);
+          console.warn(`No fashion image (v2) found for ${userName}: ${fashionData.error}`);
         }
 
         if (upperRes.ok && upperData.url) {
           setUpperImageUrl(upperData.url);
         } else {
           setUpperImageUrl(null); // Explicitly set to null if not found
-          console.warn(`No upper body image found for ${userName}: ${upperData.error}`);
+          console.warn(`No upper body image (v2) found for ${userName}: ${upperData.error}`);
         }
       } catch (err: any) {
         console.error("Failed to fetch user images:", err);
@@ -78,16 +79,16 @@ const UserImagesDisplay: React.FC<UserImagesDisplayProps> = ({ userId, userName,
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-8">
           <div className="bg-[#1a1a20] rounded-3xl overflow-hidden shadow-2xl aspect-[2/3] flex items-center justify-center">
             {upperImageUrl ? (
-              <img src={upperImageUrl} alt={`${userName}'s Upper Body`} className="w-full h-full object-cover" />
+              <img src={upperImageUrl} alt={`${userName}'s Upper Body (v2)`} className="w-full h-full object-cover" />
             ) : (
-              <p className="text-gray-500 text-lg">상반신 이미지가 없습니다</p>
+              <p className="text-gray-500 text-lg">상반신 (v2) 이미지가 없습니다</p>
             )}
           </div>
           <div className="bg-[#1a1a20] rounded-3xl overflow-hidden shadow-2xl aspect-[2/3] flex items-center justify-center">
             {fashionImageUrl ? (
-              <img src={fashionImageUrl} alt={`${userName}'s Full Outfit`} className="w-full h-full object-cover" />
+              <img src={fashionImageUrl} alt={`${userName}'s Full Outfit (v2)`} className="w-full h-full object-cover" />
             ) : (
-              <p className="text-gray-500 text-lg">전신 이미지가 없습니다</p>
+              <p className="text-gray-500 text-lg">전신 (v2) 이미지가 없습니다</p>
             )}
           </div>
         </div>

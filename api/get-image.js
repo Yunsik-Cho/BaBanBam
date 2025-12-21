@@ -11,19 +11,20 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: 'BLOB_READ_WRITE_TOKEN is not configured' });
     }
 
-    const { userId, imageType } = req.query; // imageType will be 'result' or 'upper_body'
+    const { userId, imageType } = req.query; // imageType will be 'result_v2' or 'upper_body_v2'
 
     if (!userId || !imageType) {
       return res.status(400).json({ error: 'User ID and imageType are required' });
     }
 
     let baseFileName;
-    if (imageType === 'result') {
-      baseFileName = 'fashion_image.jpg';
-    } else if (imageType === 'upper_body') {
-      baseFileName = 'upper_image.jpg';
+    if (imageType === 'result_v2') {
+      baseFileName = 'fashion_image_v2.jpg';
+    } else if (imageType === 'upper_body_v2') {
+      baseFileName = 'upper_image_v2.jpg';
     } else {
-      return res.status(400).json({ error: 'Invalid imageType' });
+      // Only _v2 versions are supported for retrieval now.
+      return res.status(400).json({ error: 'Invalid imageType. Please specify result_v2 or upper_body_v2 to fetch images.' });
     }
 
     const fileName = `fashion-king/${userId}/${baseFileName}`;
@@ -34,7 +35,7 @@ export default async function handler(req, res) {
       return res.status(200).json({ url: blob.url });
     } catch (headError) {
       if (headError.message.includes('NOT_FOUND')) {
-        return res.status(404).json({ error: 'Image not found for this user.' });
+        return res.status(404).json({ error: `Image not found for this user with type ${imageType}.` });
       }
       console.error('Error checking blob head:', headError);
       return res.status(500).json({ error: 'Error checking image existence.' });

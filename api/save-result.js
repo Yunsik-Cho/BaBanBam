@@ -42,9 +42,9 @@ export default async function handler(req, res) {
       
       let baseName;
       if (type === 'upper_body') {
-        baseName = 'upper_image.jpg';
+        baseName = 'upper_image_v2.jpg'; // Save as _v2
       } else if (type === 'result') {
-        baseName = 'fashion_image.jpg';
+        baseName = 'fashion_image_v2.jpg'; // Save as _v2
       } else {
         return res.status(400).json({ error: 'Invalid image type for saving.' });
       }
