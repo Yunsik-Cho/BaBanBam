@@ -79,17 +79,17 @@ const UserImagesDisplay: React.FC<UserImagesDisplayProps> = ({ userId, userName,
           <p className="text-red-400 font-bold">{error}</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-8">
-          {/* 상반신 이미지: 기존 비율 유지 (2:3) */}
-          <div className="bg-[#1a1a20] rounded-3xl overflow-hidden shadow-2xl aspect-[2/3] flex items-center justify-center">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mt-8">
+          {/* 상반신 이미지: 1컬럼 차지 (작게) */}
+          <div className="md:col-span-1 bg-[#1a1a20] rounded-3xl overflow-hidden shadow-2xl aspect-[2/3] flex items-center justify-center">
             {upperImageUrl ? (
               <img src={upperImageUrl} alt={`${userName}'s Upper Body (v2)`} className="w-full h-full object-cover" />
             ) : (
               <p className="text-gray-500 text-lg">상반신 (v2) 이미지가 없습니다</p>
             )}
           </div>
-          {/* 전신/결과 이미지: 잘리지 않고 전체 표시 (원본 비율 유지) */}
-          <div className="bg-[#1a1a20] rounded-3xl overflow-hidden shadow-2xl flex items-center justify-center w-full h-auto min-h-[400px]">
+          {/* 전신/결과 이미지: 2컬럼 차지 (크게) - 텍스트 가독성 확보 */}
+          <div className="md:col-span-2 bg-[#1a1a20] rounded-3xl overflow-hidden shadow-2xl flex items-center justify-center w-full h-auto min-h-[400px]">
             {fashionImageUrl ? (
               <img src={fashionImageUrl} alt={`${userName}'s Full Outfit (v2)`} className="w-full h-full object-contain" />
             ) : (

@@ -345,9 +345,9 @@ const App: React.FC = () => {
                     <div className="flex flex-col items-center gap-8 w-full max-w-3xl">
                       <div 
                         ref={critiquePanelRef} 
-                        className="w-full bg-[#111111] border border-gray-800/50 shadow-2xl overflow-hidden flex flex-col p-6 md:p-10 justify-center gap-6 min-h-[800px] h-auto"
+                        className="w-full bg-[#111111] border border-gray-800/50 shadow-2xl overflow-hidden flex flex-col p-6 md:p-10 justify-center gap-6 h-auto"
                       >
-                        <div className="flex-1 flex flex-col gap-8">
+                        <div className="flex-1 flex flex-col gap-6">
                           <div className="bg-[#1a1a1e] rounded-3xl p-4 border border-gray-800 shadow-xl flex flex-col items-center justify-center w-fit mx-auto px-12">
                             <h2 className="text-gray-500 text-[10px] font-bold uppercase mb-1 tracking-widest">TOTAL SCORE</h2>
                             <div className="flex items-center gap-2">
@@ -356,17 +356,17 @@ const App: React.FC = () => {
                             </div>
                           </div>
 
-                          <div className="bg-[#1a1a1e] rounded-3xl p-10 border border-gray-800/50 shadow-lg w-full">
-                            <h3 className="text-[11px] font-bold text-[#FC6E22]/80 uppercase mb-5 tracking-widest border-b border-[#FC6E22]/20 pb-2">AI 분석</h3>
-                            <p className="text-gray-100 leading-snug text-3xl md:text-4xl font-bold italic">
+                          <div className="bg-[#1a1a1e] rounded-3xl p-8 border border-gray-800/50 shadow-lg w-full">
+                            <h3 className="text-[11px] font-bold text-[#FC6E22]/80 uppercase mb-4 tracking-widest border-b border-[#FC6E22]/20 pb-2">AI 분석</h3>
+                            <p className="text-gray-100 leading-relaxed text-lg md:text-xl font-bold italic">
                               "{critiqueState.data.gentleCritique}"
                             </p>
                           </div>
 
-                          <div className="bg-[#1a1a1e] rounded-3xl p-10 border border-red-900/20 relative overflow-hidden shadow-lg flex-1 flex flex-col min-h-[300px] w-full">
-                            <h3 className="text-[11px] font-bold text-red-500/80 uppercase mb-5 tracking-widest border-b border-red-900/20 pb-2">바보이반식 분석</h3>
+                          <div className="bg-[#1a1a1e] rounded-3xl p-8 border border-red-900/20 relative overflow-hidden shadow-lg flex-1 flex flex-col min-h-[250px] w-full">
+                            <h3 className="text-[11px] font-bold text-red-500/80 uppercase mb-4 tracking-widest border-b border-red-900/20 pb-2">바보이반식 분석</h3>
                             <div className="relative flex-1 flex items-center">
-                              <p className={`text-gray-200 leading-relaxed text-2xl md:text-3xl font-bold transition-all duration-700 ${showSpicy ? '' : 'blur-3xl opacity-5 select-none'}`}>
+                              <p className={`text-gray-200 leading-relaxed text-lg md:text-xl font-bold transition-all duration-700 ${showSpicy ? '' : 'blur-3xl opacity-5 select-none'}`}>
                                 {critiqueState.data.sincereCritique}
                               </p>
                               {!showSpicy && (
