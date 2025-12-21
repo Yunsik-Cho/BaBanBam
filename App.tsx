@@ -1,10 +1,10 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import html2canvas from 'html2canvas';
-import { analyzeFashion, generateNoddingVideo } from './services/geminiService';
-import { CritiqueResult, ImageFile, VideoGenerationState } from './types';
+import { analyzeFashion } from './services/geminiService';
+import { CritiqueResult, ImageFile } from './types';
 
-// process.env.API_KEY 접근을 위한 선언, test
+// process.env.API_KEY 접근을 위한 선언
 declare var process: { env: { API_KEY: string } };
 
 const NAME_MAPPING: Record<string, number> = {
@@ -13,10 +13,19 @@ const NAME_MAPPING: Record<string, number> = {
   '이민재': 11, '전시완': 12, '조윤식': 13, '김상우': 14
 };
 
+interface RankingItem {
+  userId: string;
+  userName: string;
+  score: number;
+  updatedAt: string;
+}
+
 const App: React.FC = () => {
   const [userName, setUserName] = useState<string>('');
   const [selectedImage, setSelectedImage] = useState<ImageFile | null>(null);
   const [showSpicy, setShowSpicy] = useState(false);
+  const [rankings, setRankings] = useState<RankingItem[]>([]);
+  const [isRankingLoading, setIsRankingLoading] = useState(false);
 
   const [critiqueState, setCritiqueState] = useState<{
     loading: boolean;
@@ -24,15 +33,35 @@ const App: React.FC = () => {
     error: string | null;
   }>({ loading: false, data: null, error: null });
 
-  const [videoState, setVideoState] = useState<VideoGenerationState>({
-    status: 'idle',
-    url: null
-  });
-
   const fileInputRef = useRef<HTMLInputElement>(null);
   const critiquePanelRef = useRef<HTMLDivElement>(null);
 
   const sortedNames = Object.keys(NAME_MAPPING).sort((a, b) => a.localeCompare(b, 'ko'));
+
+  /**
+   * 랭킹 정보 가져오기
+   */
+  const fetchRankings = async () => {
+    setIsRankingLoading(true);
+    try {
+      // 캐시 방지를 위해 timestamp 추가
+      const response = await fetch(`/api/get-rankings?t=${Date.now()}`);
+      if (response.ok) {
+        const data = await response.json();
+        setRankings(data.rankings || []);
+      }
+    } catch (e) {
+      console.warn('Failed to fetch rankings', e);
+    } finally {
+      setIsRankingLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (userName) {
+      fetchRankings();
+    }
+  }, [userName]);
 
   /**
    * 이미지를 2:3 비율로 크롭
@@ -76,7 +105,7 @@ const App: React.FC = () => {
   /**
    * 결과를 클라우드(Vercel Blob)에 자동 저장
    */
-  const saveToCloud = async (payload: { image?: string; video?: string; type: 'upper_body' | 'result' | 'video' }) => {
+  const saveToCloud = async (payload: { image?: string; score?: number; type: 'upper_body' | 'result' | 'score' }) => {
     const trimmedName = userName.trim();
     if (!trimmedName || !NAME_MAPPING[trimmedName]) return;
     
@@ -87,9 +116,14 @@ const App: React.FC = () => {
         body: JSON.stringify({ 
           ...payload, 
           userId: NAME_MAPPING[trimmedName], 
+          userName: trimmedName,
           type: payload.type 
         })
       });
+      // 점수 저장 후 랭킹 즉시 갱신
+      if (payload.type === 'score') {
+        fetchRankings();
+      }
     } catch (e) { 
       console.warn('Auto-save failed', e); 
     }
@@ -102,6 +136,9 @@ const App: React.FC = () => {
     if (critiqueState.data && critiquePanelRef.current && selectedImage) {
       const captureAndSave = async () => {
         try {
+          // 0. 점수 정보 먼저 저장 (랭킹 반영)
+          await saveToCloud({ score: critiqueState.data!.totalScore, type: 'score' });
+
           const originalSpicy = showSpicy;
           setShowSpicy(true); // 캡처를 위해 잠시 보이기
           await new Promise(resolve => setTimeout(resolve, 2000));
@@ -141,23 +178,15 @@ const App: React.FC = () => {
         const base64Data = result.split(',')[1];
         setSelectedImage({ file, preview: result, base64Data, mimeType: file.type });
         setCritiqueState({ loading: false, data: null, error: null });
-        setVideoState({ status: 'idle', url: null });
         setShowSpicy(false);
       };
       reader.readAsDataURL(file);
     }
   };
 
-  /**
-   * API Key 존재 여부를 견고하게 확인합니다.
-   */
   const ensureApiKey = async () => {
     const envKey = process.env.API_KEY;
-    // Vite define에 의해 "undefined" 문자열이 들어올 수 있음을 방지
-    if (envKey && envKey !== "undefined" && envKey !== "") {
-      return;
-    }
-
+    if (envKey && envKey !== "undefined" && envKey !== "") return;
     // @ts-ignore
     if (window.aistudio) {
       // @ts-ignore
@@ -167,16 +196,12 @@ const App: React.FC = () => {
       }
       return;
     }
-
-    throw new Error("API Key가 설정되지 않았습니다. Vercel 환경 변수 설정을 완료해주세요.");
+    throw new Error("API Key가 설정되지 않았습니다.");
   };
 
   const handleStartProcess = async () => {
     if (!selectedImage) return;
-    
     setCritiqueState({ loading: true, data: null, error: null });
-    setVideoState({ status: 'idle', url: null });
-
     try {
       await ensureApiKey();
       const result = await analyzeFashion(selectedImage.base64Data, selectedImage.mimeType);
@@ -187,39 +212,12 @@ const App: React.FC = () => {
     }
   };
 
-  const handleGenerateVideo = async () => {
-    if (!selectedImage) return;
-    
-    setVideoState({ status: 'generating', url: null });
-    try {
-      await ensureApiKey();
-      const croppedBase64WithHeader = await cropToAspect(selectedImage.preview, 2, 3);
-      const croppedBase64 = croppedBase64WithHeader.split(',')[1];
-
-      const videoUrl = await generateNoddingVideo(croppedBase64, 'image/jpeg');
-      setVideoState({ status: 'completed', url: videoUrl });
-      
-      const response = await fetch(videoUrl);
-      const blob = await response.blob();
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        if (reader.result) {
-          saveToCloud({ video: reader.result as string, type: 'video' });
-        }
-      };
-      reader.readAsDataURL(blob);
-    } catch (error: any) {
-      console.error("Video generation failed:", error);
-      setVideoState({ status: 'error', url: null, error: error.message || "영상 생성 실패" });
-    }
-  };
-
   return (
     <div className="min-h-screen bg-[#111111] text-gray-100 font-sans pb-20">
       {!userName && (
         <div className="fixed inset-0 z-50 bg-black flex items-center justify-center p-6">
-          <div className="w-full max-w-lg bg-[#1a1a20] border border-gray-800 rounded-3xl p-8 shadow-2xl">
-            <h2 className="text-2xl font-display text-white mb-6 text-center">사용자 본인의 이름을 선택해주세요</h2>
+          <div className="w-full max-w-lg bg-[#1a1a20] border border-gray-800 rounded-3xl p-8 shadow-2xl text-center">
+            <h2 className="text-2xl font-display text-white mb-6">사용자 본인의 이름을 선택해주세요</h2>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-6 max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
               {sortedNames.map(name => (
                 <button
@@ -244,6 +242,54 @@ const App: React.FC = () => {
           <button onClick={() => setUserName('')} className="text-gray-600 hover:text-white text-xs underline transition-all">이름 다시 선택</button>
         </header>
 
+        {/* 랭킹 보드 UI */}
+        {userName && (
+          <section className="w-full max-w-2xl mb-12 bg-[#1a1a20] border border-gray-800 rounded-3xl overflow-hidden shadow-2xl">
+            <div className="px-6 py-4 border-b border-gray-800 flex justify-between items-center bg-gray-900/50">
+              <h2 className="text-lg font-display text-white tracking-tight">🏆 FASHION LEADERBOARD</h2>
+              <button 
+                onClick={fetchRankings}
+                className="text-[10px] text-[#FC6E22] font-bold uppercase tracking-widest hover:underline"
+              >
+                {isRankingLoading ? '갱신 중...' : '새로고침'}
+              </button>
+            </div>
+            <div className="p-6">
+              {isRankingLoading && rankings.length === 0 ? (
+                <div className="flex flex-col items-center py-8 space-y-3">
+                  <div className="w-8 h-8 border-2 border-[#FC6E22]/20 border-t-[#FC6E22] rounded-full animate-spin"></div>
+                  <p className="text-sm text-gray-500">순위를 불러오는 중입니다...</p>
+                </div>
+              ) : rankings.length > 0 ? (
+                <div className="space-y-3">
+                  {rankings.slice(0, 5).map((rank, index) => (
+                    <div key={rank.userId} className={`flex items-center justify-between p-4 rounded-2xl transition-all ${rank.userName === userName ? 'bg-[#FC6E22]/20 border border-[#FC6E22]/40 scale-[1.02]' : 'bg-black/40 border border-gray-800/50'}`}>
+                      <div className="flex items-center gap-5">
+                        <span className={`w-10 h-10 flex items-center justify-center rounded-xl text-lg font-display ${index === 0 ? 'bg-yellow-500 text-black' : index === 1 ? 'bg-gray-300 text-black' : index === 2 ? 'bg-orange-700 text-white' : 'bg-gray-800 text-gray-500'}`}>
+                          {index + 1}
+                        </span>
+                        <div>
+                          <p className={`font-bold text-lg ${rank.userName === userName ? 'text-[#FC6E22]' : 'text-gray-200'}`}>{rank.userName}</p>
+                          <p className="text-[10px] text-gray-600 font-medium">{new Date(rank.updatedAt).toLocaleDateString()}</p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-3xl font-display text-white leading-none">{rank.score}</span>
+                        <span className="ml-1 text-[10px] text-gray-600 font-bold uppercase tracking-tighter">points</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-10">
+                  <p className="text-gray-500 text-lg mb-2">아직 기록된 점수가 없습니다.</p>
+                  <p className="text-[#FC6E22]/60 text-sm font-bold animate-pulse">지금 바로 첫 번째 패션왕에 도전해보세요! 🚀</p>
+                </div>
+              )}
+            </div>
+          </section>
+        )}
+
         {selectedImage && (
           <div className="w-full flex flex-col items-center gap-10">
             {!critiqueState.data && !critiqueState.loading && (
@@ -256,9 +302,9 @@ const App: React.FC = () => {
             )}
 
             {critiqueState.loading && (
-              <div className="w-full flex flex-col items-center justify-center min-h-[500px] space-y-6">
+              <div className="w-full flex flex-col items-center justify-center min-h-[500px] space-y-6 text-center">
                 <div className="w-16 h-16 border-4 border-white/10 border-t-[#FC6E22] rounded-full animate-spin"></div>
-                <div className="text-center space-y-2">
+                <div className="space-y-2">
                   <p className="text-xl font-bold text-white">음.. 이럴꺼면..</p>
                   <p className="text-gray-500 font-medium italic">"If I were you.."</p>
                 </div>
@@ -313,37 +359,7 @@ const App: React.FC = () => {
                 </div>
 
                 <div className="w-full flex flex-col gap-4" data-html2canvas-ignore>
-                  {videoState.status === 'idle' && (
-                    <button onClick={handleGenerateVideo} className="w-full py-5 bg-gradient-to-r from-[#FC6E22]/30 to-[#FC6E22]/60 border border-[#FC6E22]/40 rounded-2xl text-white font-bold hover:brightness-125 transition-all text-xl shadow-2xl">
-                      🎬 패션왕 인정 영상 만들기
-                    </button>
-                  )}
-                  
-                  {videoState.status === 'generating' && (
-                    <div className="w-full bg-gray-900/50 rounded-2xl p-8 border border-gray-800 flex flex-col items-center gap-4">
-                      <div className="w-10 h-10 border-4 border-[#FC6E22] border-t-transparent rounded-full animate-spin"></div>
-                      <div className="text-center">
-                        <p className="text-white font-bold text-lg">AI가 당신의 모습을 생생하게 만드는 중...</p>
-                        <p className="text-gray-500 text-sm">당신의 패션이 영상으로 완성됩니다.</p>
-                      </div>
-                    </div>
-                  )}
-
-                  {videoState.status === 'completed' && videoState.url && (
-                    <div className="w-full bg-gray-900 rounded-2xl p-4 border border-gray-800 shadow-xl">
-                       <video src={videoState.url} autoPlay loop playsInline controls className="w-full rounded-xl mb-4 aspect-[9/16] bg-black" />
-                       <p className="text-center text-[#FC6E22] font-bold">✨ 패션왕 인정 영상이 생성되었습니다!</p>
-                    </div>
-                  )}
-
-                  {videoState.status === 'error' && (
-                    <div className="w-full bg-red-900/20 border border-red-500/50 rounded-xl p-4 text-center">
-                      <p className="text-red-400 font-bold">{videoState.error}</p>
-                      <button onClick={handleGenerateVideo} className="mt-2 text-sm underline hover:text-white">다시 시도</button>
-                    </div>
-                  )}
-
-                  <button onClick={() => { setSelectedImage(null); setCritiqueState({loading: false, data: null, error: null}); setVideoState({status: 'idle', url: null}); }} className="w-full py-4 text-gray-500 border border-gray-800 rounded-xl hover:bg-gray-800 hover:text-white text-base font-medium transition-all">
+                  <button onClick={() => { setSelectedImage(null); setCritiqueState({loading: false, data: null, error: null}); }} className="w-full py-4 text-gray-500 border border-gray-800 rounded-xl hover:bg-gray-800 hover:text-white text-base font-medium transition-all">
                     새로운 사진으로 다시하기
                   </button>
                 </div>
