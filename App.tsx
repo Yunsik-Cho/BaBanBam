@@ -356,17 +356,17 @@ const App: React.FC = () => {
                             </div>
                           </div>
 
-                          <div className="bg-[#1a1a1e] rounded-3xl p-8 border border-gray-800/50 shadow-lg w-full">
-                            <h3 className="text-[11px] font-bold text-[#FC6E22]/80 uppercase mb-4 tracking-widest border-b border-[#FC6E22]/20 pb-2">AI 분석</h3>
-                            <p className="text-gray-100 leading-relaxed text-lg md:text-xl font-bold italic">
+                          <div className="bg-[#1a1a1e] rounded-3xl p-6 border border-gray-800/50 shadow-lg w-full">
+                            <h3 className="text-[11px] font-bold text-[#FC6E22]/80 uppercase mb-3 tracking-widest border-b border-[#FC6E22]/20 pb-2">AI 분석</h3>
+                            <p className="text-gray-100 leading-relaxed text-base md:text-lg font-bold italic">
                               "{critiqueState.data.gentleCritique}"
                             </p>
                           </div>
 
-                          <div className="bg-[#1a1a1e] rounded-3xl p-8 border border-red-900/20 relative overflow-hidden shadow-lg flex-1 flex flex-col min-h-[250px] w-full">
-                            <h3 className="text-[11px] font-bold text-red-500/80 uppercase mb-4 tracking-widest border-b border-red-900/20 pb-2">바보이반식 분석</h3>
+                          <div className="bg-[#1a1a1e] rounded-3xl p-6 border border-red-900/20 relative overflow-hidden shadow-lg flex-1 flex flex-col min-h-[150px] w-full">
+                            <h3 className="text-[11px] font-bold text-red-500/80 uppercase mb-3 tracking-widest border-b border-red-900/20 pb-2">바보이반식 분석</h3>
                             <div className="relative flex-1 flex items-center">
-                              <p className={`text-gray-200 leading-relaxed text-lg md:text-xl font-bold transition-all duration-700 ${showSpicy ? '' : 'blur-3xl opacity-5 select-none'}`}>
+                              <p className={`text-gray-200 leading-relaxed text-base md:text-lg font-bold transition-all duration-700 ${showSpicy ? '' : 'blur-3xl opacity-5 select-none'}`}>
                                 {critiqueState.data.sincereCritique}
                               </p>
                               {!showSpicy && (
