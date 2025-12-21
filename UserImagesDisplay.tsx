@@ -18,24 +18,27 @@ const UserImagesDisplay: React.FC<UserImagesDisplayProps> = ({ userId, userName,
       setIsLoading(true);
       setError(null);
       try {
+        const timestamp = Date.now();
         const [fashionRes, upperRes] = await Promise.all([
           // Explicitly request _v2 versions
-          fetch(`/api/get-image?userId=${userId}&imageType=result_v2&t=${Date.now()}`),
-          fetch(`/api/get-image?userId=${userId}&imageType=upper_body_v2&t=${Date.now()}`),
+          fetch(`/api/get-image?userId=${userId}&imageType=result_v2&t=${timestamp}`),
+          fetch(`/api/get-image?userId=${userId}&imageType=upper_body_v2&t=${timestamp}`),
         ]);
 
         const fashionData = await fashionRes.json();
         const upperData = await upperRes.json();
 
         if (fashionRes.ok && fashionData.url) {
-          setFashionImageUrl(fashionData.url);
+          // Append timestamp to bypass browser cache for the image file itself
+          setFashionImageUrl(`${fashionData.url}?t=${timestamp}`);
         } else {
           setFashionImageUrl(null); // Explicitly set to null if not found
           console.warn(`No fashion image (v2) found for ${userName}: ${fashionData.error}`);
         }
 
         if (upperRes.ok && upperData.url) {
-          setUpperImageUrl(upperData.url);
+          // Append timestamp to bypass browser cache for the image file itself
+          setUpperImageUrl(`${upperData.url}?t=${timestamp}`);
         } else {
           setUpperImageUrl(null); // Explicitly set to null if not found
           console.warn(`No upper body image (v2) found for ${userName}: ${upperData.error}`);
