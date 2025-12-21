@@ -279,7 +279,7 @@ const App: React.FC = () => {
                     </div>
                   ) : rankings.length > 0 ? (
                     <div className="space-y-3">
-                      {rankings.slice(0, 5).map((rank, index) => (
+                      {rankings.map((rank, index) => (
                         <div 
                           key={rank.userId} 
                           onClick={() => { // Add onClick handler
