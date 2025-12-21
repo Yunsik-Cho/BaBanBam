@@ -238,7 +238,6 @@ const App: React.FC = () => {
             <div className="mt-8 pt-6 border-t border-gray-800">
               <a 
                 href="https://ba-ban-bam-page.vercel.app/" 
-                target="_blank" 
                 rel="noopener noreferrer"
                 className="inline-flex items-center justify-center w-full py-3 px-4 bg-[#FC6E22] text-black font-bold rounded-xl hover:bg-orange-600 transition-all shadow-lg text-lg"
               >
